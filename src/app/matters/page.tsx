@@ -1,0 +1,1 @@
+export default function MattersPage() { return <section className="page-section"><header className="page-header"><div><p className="section-label">Radni prostor</p><h1>Matters</h1><p className="page-description">Ovaj modul biće dodat u narednom koraku.</p></div></header></section>; }
