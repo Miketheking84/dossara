@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SDJ MIKE — UI Reference</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="mark">SDJ</div><div><strong>SDJ MIKE</strong><span>Legal Command Center</span></div></div>
+      <nav id="nav"></nav>
+      <div class="profile"><div class="avatar">MJ</div><div><strong>Milovan D. Jović</strong><span>Advokat</span></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><h1 id="page-title">Danas</h1><p id="page-subtitle">Pregled obaveza koje zahtevaju pažnju</p></div>
+        <div class="top-actions"><input aria-label="Pretraga" placeholder="Pretraga klijenta, predmeta, roka…"/><button class="primary" id="new-button">+ Novo</button></div>
+      </header>
+      <section id="page"></section>
+    </main>
+  </div>
+  <div id="drawer" class="drawer hidden"></div>
+  <div id="modal" class="modal-backdrop hidden"><div class="modal"><button class="close" id="modal-close">×</button><div id="modal-content"></div></div></div>
+  <script src="app.js"></script>
+</body>
+</html>
