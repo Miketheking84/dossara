@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
@@ -62,6 +62,58 @@ async function pathExists(candidate: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
+  }
+}
+
+export async function GET() {
+  try {
+    const clientsRoot = await getClientsRoot();
+    const clientEntries = await readdir(clientsRoot, { withFileTypes: true });
+    const clients = clientEntries.filter((entry) => entry.isDirectory());
+    const matters = (
+      await Promise.all(
+        clients.map(async (clientEntry) => {
+          const clientPath = path.win32.join(clientsRoot, clientEntry.name);
+          if (!isSafeDirectChild(clientsRoot, clientPath)) return [];
+          const entries = await readdir(clientPath, { withFileTypes: true });
+          return Promise.all(
+            entries
+              .filter((entry) => entry.isDirectory() && entry.name.startsWith("SDJ_"))
+              .map(async (entry) => {
+                const matterPath = path.win32.join(clientPath, entry.name);
+                let matterName = entry.name;
+                try {
+                  const commandCenter = await readFile(
+                    path.win32.join(matterPath, "00 CONTROL", "command-center.md"),
+                    "utf8",
+                  );
+                  const match = /^Predmet:\s*(.*)$/m.exec(commandCenter);
+                  if (match?.[1]?.trim()) matterName = match[1].trim();
+                } catch {
+                  // Naziv foldera je fallback kada kontrolni fajl nije čitljiv.
+                }
+                return {
+                  clientFolder: clientEntry.name,
+                  matterFolder: entry.name,
+                  matterName,
+                  matterPath,
+                };
+              }),
+          );
+        }),
+      )
+    ).flat();
+    matters.sort((left, right) =>
+      `${left.clientFolder}\\${left.matterFolder}`.localeCompare(
+        `${right.clientFolder}\\${right.matterFolder}`,
+      ),
+    );
+    return NextResponse.json({ matters });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Aktivni predmeti nisu mogli biti učitani." },
+      { status: 500 },
+    );
   }
 }
 
