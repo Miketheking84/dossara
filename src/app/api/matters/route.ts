@@ -1,4 +1,5 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
@@ -17,8 +18,7 @@ function readInput(body: unknown): MatterInput | null {
 
 function controlContents(input: MatterInput) {
   const v = markdownValue;
-  const waitingNote = input.waitingDetail ? `\n- Napomena: ${v(input.waitingDetail)}` : "";
-  const commandCenter = `# Command Center\n\nKlijent: ${v(input.client)}\nPredmet: ${v(input.matterName)}\nDatum otvaranja: ${v(input.openingDate)}\nStatus: ${v(input.status)}\nPrioritet: ${v(input.priority)}\nOblast prava: ${v(input.legalArea)}\nSledeći korak: ${v(input.nextStep)}\nČeka se od:\n- ${v(input.waitingFrom)}${waitingNote}\nRok: ${v(input.deadline)}\nKratak opis: ${v(input.description)}\nKljučna pitanja:\nRizici:\nOčekivani output: ${v(input.expectedOutput)}\nStatus outputa:\nFinalni dokument:\nFinalni cilj:\n`;
+  const commandCenter = `# Command Center\n\nKlijent: ${v(input.client)}\nPredmet: ${v(input.matterName)}\nDatum otvaranja: ${v(input.openingDate)}\nStatus: ${v(input.status)}\nPrioritet: ${v(input.priority)}\nOblast prava: ${v(input.legalArea)}\nSledeći korak: ${v(input.nextStep)}\nČeka se od: ${v(input.waitingFrom)}\nDetalj čekanja / napomena: ${v(input.waitingDetail)}\nRok: ${v(input.deadline)}\nKratak opis: ${v(input.description)}\nKljučna pitanja:\nRizici:\nOčekivani output: ${v(input.expectedOutput)}\nStatus outputa:\nFinalni dokument:\nFinalni cilj:\n`;
   const actionSection = input.priority === "Hitno" || input.priority === "Visok" ? "Hitno" : "Ove nedelje";
   const nextActions = `# Next Actions\n\n## Hitno\n${actionSection === "Hitno" && input.nextStep ? `- ${v(input.nextStep)}` : "- "}\n\n## Ove nedelje\n${actionSection === "Ove nedelje" && input.nextStep ? `- ${v(input.nextStep)}` : "- "}\n\n## Čeka se od klijenta\n- \n\n## Čeka se od druge strane\n- \n\n## Potrebno proveriti\n- \n`;
   return {
@@ -30,11 +30,54 @@ function controlContents(input: MatterInput) {
   } satisfies Record<(typeof CONTROL_FILES)[number], string>;
 }
 
+function isValidIsoDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1];
+}
+
+async function firstAvailableFolderName(clientPath: string, baseFolderName: string) {
+  for (let index = 1; index <= 999; index += 1) {
+    const candidate = `${baseFolderName}_${String(index).padStart(3, "0")}`;
+    try {
+      await stat(path.win32.join(clientPath, candidate));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return candidate;
+      throw error;
+    }
+  }
+  return "";
+}
+
+async function pathExists(candidate: string) {
+  try {
+    await stat(candidate);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Neispravan JSON zahtev." }, { status: 400 }); }
   const input = readInput(body);
-  if (!input || !input.client || !input.matterName || !/^\d{4}-\d{2}-\d{2}$/.test(input.openingDate)) return NextResponse.json({ error: "Klijent, naziv predmeta i datum otvaranja su obavezni." }, { status: 400 });
+  if (!input || !input.client || !input.matterName || !input.openingDate) {
+    return NextResponse.json({ error: "Klijent, naziv predmeta i datum otvaranja su obavezni." }, { status: 400 });
+  }
+  if (!isValidIsoDate(input.openingDate)) {
+    return NextResponse.json({ error: "Datum otvaranja mora biti stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
+  }
+  if (input.deadline && !isValidIsoDate(input.deadline)) {
+    return NextResponse.json({ error: "Rok mora biti prazan ili stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
+  }
   let clientsRoot: string;
   try {
     clientsRoot = await getClientsRoot();
@@ -55,30 +98,82 @@ export async function POST(request: Request) {
   if (input.folderNameOverride && !overridePattern.test(input.folderNameOverride)) return NextResponse.json({ error: "Predloženi naziv predmeta nije validan." }, { status: 400 });
   const folderName = input.folderNameOverride || baseFolderName;
   const matterPath = path.win32.join(clientPath, folderName);
-  try {
-    try {
-      await stat(matterPath);
-      let suggestedFolderName = "";
-      for (let index = 1; index <= 999; index += 1) {
-        const candidate = `${baseFolderName}_${String(index).padStart(3, "0")}`;
-        try { await stat(path.win32.join(clientPath, candidate)); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") { suggestedFolderName = candidate; break; } throw error; }
-      }
-      return NextResponse.json({ error: "Predmet sa ovim nazivom već postoji.", suggestedFolderName }, { status: 409 });
-    }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    await mkdir(matterPath);
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Folder predmeta nije kreiran." }, { status: 500 }); }
+  if (!isSafeDirectChild(clientPath, matterPath)) {
+    return NextResponse.json({ error: "Predloženi naziv predmeta nije validan." }, { status: 400 });
+  }
 
-  const createdFolders: string[] = []; const createdFiles: string[] = []; const errors: { item: string; message: string }[] = [];
-  for (const folder of MATTER_FOLDERS) {
-    try { await mkdir(path.win32.join(matterPath, folder)); createdFolders.push(folder); }
-    catch (error) { errors.push({ item: folder, message: error instanceof Error ? error.message : "Greška pri kreiranju foldera." }); }
+  try {
+    if (await pathExists(matterPath)) {
+      return NextResponse.json(
+        {
+          error: "Predmet sa ovim nazivom već postoji.",
+          suggestedFolderName: await firstAvailableFolderName(clientPath, baseFolderName),
+        },
+        { status: 409 },
+      );
+    }
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Provera naziva predmeta nije uspela." }, { status: 500 });
   }
-  const contents = controlContents(input);
-  for (const file of CONTROL_FILES) {
-    try { await writeFile(path.win32.join(matterPath, "00 CONTROL", file), contents[file], { encoding: "utf8", flag: "wx" }); createdFiles.push(file); }
-    catch (error) { errors.push({ item: file, message: error instanceof Error ? error.message : "Greška pri kreiranju fajla." }); }
+
+  const stagingPath = path.win32.join(clientPath, `.sdj-mike-staging-${randomUUID()}`);
+  let stagingCreated = false;
+  try {
+    await mkdir(stagingPath);
+    stagingCreated = true;
+
+    for (const folder of MATTER_FOLDERS) {
+      await mkdir(path.win32.join(stagingPath, folder));
+    }
+
+    const contents = controlContents(input);
+    for (const file of CONTROL_FILES) {
+      await writeFile(path.win32.join(stagingPath, "00 CONTROL", file), contents[file], { encoding: "utf8", flag: "wx" });
+    }
+
+    if (await pathExists(matterPath)) {
+      return NextResponse.json(
+        {
+          error: "Predmet sa ovim nazivom već postoji.",
+          suggestedFolderName: await firstAvailableFolderName(clientPath, baseFolderName),
+        },
+        { status: 409 },
+      );
+    }
+
+    await rename(stagingPath, matterPath);
+    stagingCreated = false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EEXIST" || code === "ENOTEMPTY") {
+      return NextResponse.json(
+        {
+          error: "Predmet sa ovim nazivom već postoji.",
+          suggestedFolderName: await firstAvailableFolderName(clientPath, baseFolderName),
+        },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? `Predmet nije kreiran: ${error.message}` : "Predmet nije kreiran." },
+      { status: 500 },
+    );
+  } finally {
+    if (stagingCreated) {
+      try {
+        await rm(stagingPath, { recursive: true, force: true });
+      } catch {
+        // Finalni matter folder nikada nije rollback target.
+      }
+    }
   }
-  return NextResponse.json({ success: errors.length === 0, matterPath, folderName, createdFolders, createdFiles, errors }, { status: errors.length ? 207 : 201 });
+
+  return NextResponse.json({
+    success: true,
+    matterPath,
+    folderName,
+    createdFolders: [...MATTER_FOLDERS],
+    createdFiles: [...CONTROL_FILES],
+    errors: [],
+  }, { status: 201 });
 }

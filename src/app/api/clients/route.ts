@@ -1,7 +1,7 @@
 import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { sanitizeFolderPart } from "@/lib/sdj-files";
+import { isSafeDirectChild, sanitizeFolderPart } from "@/lib/sdj-files";
 import { getClientsRoot } from "@/lib/sdj-workspace";
 
 export const runtime = "nodejs";
@@ -26,9 +26,19 @@ export async function POST(request: Request) {
   try {
     const clientsRoot = await getClientsRoot();
     const clientPath = path.win32.join(clientsRoot, folderName);
+    if (!isSafeDirectChild(clientsRoot, clientPath)) {
+      return NextResponse.json({ error: "Neispravan naziv klijenta." }, { status: 400 });
+    }
     try { await stat(clientPath); return NextResponse.json({ error: `Klijent ${folderName} već postoji.` }, { status: 409 }); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    await mkdir(clientPath);
+    try {
+      await mkdir(clientPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        return NextResponse.json({ error: `Klijent ${folderName} već postoji.` }, { status: 409 });
+      }
+      throw error;
+    }
     return NextResponse.json({ client: folderName, path: clientPath }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Klijent nije kreiran." }, { status: 500 });
