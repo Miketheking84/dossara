@@ -1,7 +1,5 @@
 import path from "node:path";
 
-export const SDJ_ROOT = String.raw`C:\Users\Jocovic\OneDrive\Desktop\SDJ_TEST\SDJ_LEGAL_TEST`;
-export const CLIENTS_ROOT = path.win32.join(SDJ_ROOT, "01 KLIJENTI");
 export const MATTER_FOLDERS = ["00 CONTROL", "01 ULAZ", "02 RADNO", "03 FINALNO", "04 AI"] as const;
 export const CONTROL_FILES = ["command-center.md", "chronology.md", "next-actions.md", "document-register.md", "ai-work-log.md"] as const;
 

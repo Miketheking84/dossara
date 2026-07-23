@@ -2,8 +2,6 @@
 
 import { FormEvent, useState } from "react";
 
-const DEFAULT_PATH = String.raw`C:\Users\Jocovic\OneDrive\Desktop\SDJ_TEST\SDJ_LEGAL_TEST`;
-
 type Result = {
   root: { status: "created" | "exists" | "error"; path: string };
   created: string[];
@@ -12,7 +10,7 @@ type Result = {
 };
 
 export function SettingsForm() {
-  const [rootPath, setRootPath] = useState(DEFAULT_PATH);
+  const [rootPath, setRootPath] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [pending, setPending] = useState(false);
   const [requestError, setRequestError] = useState("");
@@ -37,7 +35,7 @@ export function SettingsForm() {
       <form onSubmit={submit}>
         <label htmlFor="root-path">Root folder path</label>
         <p className="field-help">Folder ostaje na ovom računaru. Aplikacija ne šalje dokumente eksternim servisima.</p>
-        <input id="root-path" value={rootPath} onChange={(e) => setRootPath(e.target.value)} required spellCheck={false}/>
+        <input id="root-path" value={rootPath} onChange={(e) => setRootPath(e.target.value)} placeholder="Unesite odobreni SDJ MIKE test root" required spellCheck={false}/>
         <button type="submit" disabled={pending}>{pending ? "Proveravam strukturu…" : "Create / Verify SDJ_LEGAL structure"}</button>
       </form>
 

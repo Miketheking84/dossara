@@ -1,14 +1,15 @@
 import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { CLIENTS_ROOT, sanitizeFolderPart } from "@/lib/sdj-files";
+import { sanitizeFolderPart } from "@/lib/sdj-files";
+import { getClientsRoot } from "@/lib/sdj-workspace";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    await mkdir(CLIENTS_ROOT, { recursive: true });
-    const entries = await readdir(CLIENTS_ROOT, { withFileTypes: true });
+    const clientsRoot = await getClientsRoot();
+    const entries = await readdir(clientsRoot, { withFileTypes: true });
     const clients = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort((a, b) => a.localeCompare(b));
     return NextResponse.json({ clients });
   } catch (error) {
@@ -22,8 +23,9 @@ export async function POST(request: Request) {
   const name = typeof body === "object" && body !== null && "name" in body && typeof body.name === "string" ? body.name : "";
   const folderName = sanitizeFolderPart(name, 60);
   if (!folderName) return NextResponse.json({ error: "Unesite ispravan naziv klijenta." }, { status: 400 });
-  const clientPath = path.win32.join(CLIENTS_ROOT, folderName);
   try {
+    const clientsRoot = await getClientsRoot();
+    const clientPath = path.win32.join(clientsRoot, folderName);
     try { await stat(clientPath); return NextResponse.json({ error: `Klijent ${folderName} već postoji.` }, { status: 409 }); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     await mkdir(clientPath);

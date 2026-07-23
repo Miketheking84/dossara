@@ -1,7 +1,8 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { CLIENTS_ROOT, CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
+import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
+import { getClientsRoot } from "@/lib/sdj-workspace";
 
 export const runtime = "nodejs";
 
@@ -34,9 +35,18 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Neispravan JSON zahtev." }, { status: 400 }); }
   const input = readInput(body);
   if (!input || !input.client || !input.matterName || !/^\d{4}-\d{2}-\d{2}$/.test(input.openingDate)) return NextResponse.json({ error: "Klijent, naziv predmeta i datum otvaranja su obavezni." }, { status: 400 });
+  let clientsRoot: string;
+  try {
+    clientsRoot = await getClientsRoot();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Workspace nije konfigurisan." },
+      { status: 500 },
+    );
+  }
   const clientFolder = sanitizeFolderPart(input.client, 60);
-  const clientPath = path.win32.join(CLIENTS_ROOT, clientFolder);
-  if (!isSafeDirectChild(CLIENTS_ROOT, clientPath)) return NextResponse.json({ error: "Neispravan klijent." }, { status: 400 });
+  const clientPath = path.win32.join(clientsRoot, clientFolder);
+  if (!isSafeDirectChild(clientsRoot, clientPath)) return NextResponse.json({ error: "Neispravan klijent." }, { status: 400 });
   try { const info = await stat(clientPath); if (!info.isDirectory()) throw new Error(); }
   catch { return NextResponse.json({ error: "Izabrani klijent ne postoji." }, { status: 404 }); }
 
