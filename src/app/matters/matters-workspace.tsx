@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type MatterResult = { success: boolean; matterPath: string; folderName: string; createdFolders: string[]; createdFiles: string[]; errors: { item: string; message: string }[] };
@@ -11,6 +12,7 @@ const PRIORITIES = ["Nizak", "Srednji", "Visok", "Hitno"];
 const WAITING_FROM = ["Niko / nije primenljivo", "Klijent", "Druga strana", "Sud / državni organ", "Interno", "Ostalo"];
 const transliteration: Record<string,string> = { č:"c",ć:"c",š:"s",đ:"dj",ž:"z",Č:"C",Ć:"C",Š:"S",Đ:"DJ",Ž:"Z" };
 const normalize = (value:string) => [...value].map(char=>transliteration[char]??char).join("").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[<>:"/\\|?*]/g," ").trim().toUpperCase().replace(/\s+/g,"_").replace(/_+/g,"_").slice(0,60).replace(/_+$/g,"");
+const cockpitLinkStyle = { display:"inline-flex", alignItems:"center", minHeight:"38px", padding:"0 13px", border:"1px solid #17324d", borderRadius:"4px", color:"#17324d", fontSize:"12px", fontWeight:700, textDecoration:"none" } as const;
 
 export function MattersWorkspace() {
   const [clients,setClients]=useState<string[]>([]); const [loading,setLoading]=useState(true); const [newClient,setNewClient]=useState(""); const [clientMessage,setClientMessage]=useState("");
@@ -58,7 +60,7 @@ export function MattersWorkspace() {
     <section className="work-panel active-matters-panel">
       <div className="panel-heading"><div><h2>Aktivni predmeti</h2><p>Direktni SDJ_ folderi u aktivnom workspaceu</p></div><span>{activeMatters.length}</span></div>
       {mattersMessage&&<p className="active-matters-message" aria-live="polite">{mattersMessage}</p>}
-      {mattersLoading?<p className="active-matters-empty">Učitavanje…</p>:activeMatters.length?<div className="active-matters-list">{activeMatters.map(matter=>{const key=`${matter.clientFolder}\\${matter.matterFolder}`;return <article className="active-matter-row" key={key}><div><strong>{matter.matterName}</strong><span>Klijent: {matter.clientFolder}</span><code>{matter.matterFolder}</code></div><div className="active-matter-actions"><button type="button" onClick={()=>openActiveMatter(matter)}>Open Matter Folder</button><button type="button" className="danger-action" disabled={movingMatter===key} onClick={()=>setPendingMoveMatter(matter)} aria-label={`Obriši predmet ${matter.matterFolder}`}>{movingMatter===key?"Premještam…":"Obriši predmet"}</button></div></article>})}</div>:<p className="active-matters-empty">Nema aktivnih predmeta.</p>}
+      {mattersLoading?<p className="active-matters-empty">Učitavanje…</p>:activeMatters.length?<div className="active-matters-list">{activeMatters.map(matter=>{const key=`${matter.clientFolder}\\${matter.matterFolder}`;const hasCockpitSegments=typeof matter.clientFolder==="string"&&matter.clientFolder.length>0&&typeof matter.matterFolder==="string"&&matter.matterFolder.startsWith("SDJ_");const cockpitHref=hasCockpitSegments?`/matters/${encodeURIComponent(matter.clientFolder)}/${encodeURIComponent(matter.matterFolder)}`:"";return <article className="active-matter-row" key={key}><div><strong>{matter.matterName}</strong><span>Klijent: {matter.clientFolder}</span><code>{matter.matterFolder}</code></div><div className="active-matter-actions">{hasCockpitSegments?<Link href={cockpitHref} style={cockpitLinkStyle}>Otvori Matter Cockpit</Link>:null}<button type="button" onClick={()=>openActiveMatter(matter)}>Open Matter Folder</button><button type="button" className="danger-action" disabled={movingMatter===key} onClick={()=>setPendingMoveMatter(matter)} aria-label={`Obriši predmet ${matter.matterFolder}`}>{movingMatter===key?"Premještam…":"Obriši predmet"}</button></div></article>})}</div>:<p className="active-matters-empty">Nema aktivnih predmeta.</p>}
     </section>
     {pendingMoveMatter&&<div className="matter-confirm-backdrop" role="presentation"><section className="matter-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="move-matter-title"><h2 id="move-matter-title">Obriši predmet</h2><dl><div><dt>Predmet</dt><dd>{pendingMoveMatter.matterName}</dd></div><div><dt>Klijent</dt><dd>{pendingMoveMatter.clientFolder}</dd></div><div><dt>Matter folder</dt><dd><code>{pendingMoveMatter.matterFolder}</code></dd></div></dl><p>Predmet neće biti trajno obrisan. Cijeli folder biće premješten u 05 ARHIVA\OBRISANI_PREDMETI.</p><div className="matter-confirm-actions"><button type="button" onClick={()=>setPendingMoveMatter(null)}>Otkaži</button><button type="button" className="danger-action" onClick={()=>moveMatterToArchive(pendingMoveMatter)} disabled={Boolean(movingMatter)}>Potvrdi premještanje</button></div></section></div>}
   </>;
