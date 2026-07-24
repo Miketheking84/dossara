@@ -139,6 +139,22 @@ export default async function MatterCockpitPage({
         clientFolder={resolvedMatter.clientFolder}
         matterFolder={resolvedMatter.matterFolder}
       />
+      <nav
+        className="matter-cockpit-prompt-action"
+        aria-label="AI akcije predmeta"
+      >
+        <Link
+          href={{
+            pathname: "/prompts",
+            query: {
+              clientFolder: resolvedMatter.clientFolder,
+              matterFolder: resolvedMatter.matterFolder,
+            },
+          }}
+        >
+          Generate Prompt
+        </Link>
+      </nav>
 
       {fileStatus !== "ok" ? (
         <section className="work-panel" style={{ marginTop: "30px" }}>
