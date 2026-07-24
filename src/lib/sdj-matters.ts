@@ -1,6 +1,6 @@
 import "server-only";
 
-import { realpath, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   getActiveWorkspaceRoot,
@@ -48,6 +48,152 @@ export type ResolvedActiveMatter = {
   finalnoPath: string;
   aiPath: string;
 };
+
+export type MatterCommandCenterMetadata = {
+  client: string | null;
+  matter: string | null;
+  openedAt: string | null;
+  status: string | null;
+  priority: string | null;
+  legalArea: string | null;
+  nextStep: string | null;
+  waitingFor: string | null;
+  waitingDetail: string | null;
+  deadline: string | null;
+  shortDescription: string | null;
+  keyQuestions: string | null;
+  risks: string | null;
+  expectedOutput: string | null;
+  outputStatus: string | null;
+  finalDocument: string | null;
+  finalGoal: string | null;
+};
+
+export type MatterCommandCenterWarning =
+  | { code: "EMPTY_FILE" }
+  | { code: "NO_KNOWN_FIELDS" }
+  | {
+      code: "DUPLICATE_FIELD";
+      field: keyof MatterCommandCenterMetadata;
+      label: string;
+    };
+
+export type MatterCommandCenterFileStatus = "ok" | "missing" | "unreadable";
+
+export type MatterCommandCenterResult = {
+  resolvedMatter: ResolvedActiveMatter;
+  commandCenterPath: string;
+  metadata: MatterCommandCenterMetadata;
+  fileStatus: MatterCommandCenterFileStatus;
+  warnings: MatterCommandCenterWarning[];
+};
+
+const COMMAND_CENTER_FIELDS = [
+  ["Klijent", "client"],
+  ["Predmet", "matter"],
+  ["Datum otvaranja", "openedAt"],
+  ["Status", "status"],
+  ["Prioritet", "priority"],
+  ["Oblast prava", "legalArea"],
+  ["Sledeći korak", "nextStep"],
+  ["Čeka se od", "waitingFor"],
+  ["Detalj čekanja / napomena", "waitingDetail"],
+  ["Rok", "deadline"],
+  ["Kratak opis", "shortDescription"],
+  ["Ključna pitanja", "keyQuestions"],
+  ["Rizici", "risks"],
+  ["Očekivani output", "expectedOutput"],
+  ["Status outputa", "outputStatus"],
+  ["Finalni dokument", "finalDocument"],
+  ["Finalni cilj", "finalGoal"],
+] as const satisfies readonly (readonly [
+  string,
+  keyof MatterCommandCenterMetadata,
+])[];
+
+const COMMAND_CENTER_FIELD_BY_LABEL = new Map<string, keyof MatterCommandCenterMetadata>(
+  COMMAND_CENTER_FIELDS,
+);
+
+function emptyCommandCenterMetadata(): MatterCommandCenterMetadata {
+  return {
+    client: null,
+    matter: null,
+    openedAt: null,
+    status: null,
+    priority: null,
+    legalArea: null,
+    nextStep: null,
+    waitingFor: null,
+    waitingDetail: null,
+    deadline: null,
+    shortDescription: null,
+    keyQuestions: null,
+    risks: null,
+    expectedOutput: null,
+    outputStatus: null,
+    finalDocument: null,
+    finalGoal: null,
+  };
+}
+
+export function parseMatterCommandCenter(content: string): {
+  metadata: MatterCommandCenterMetadata;
+  warnings: MatterCommandCenterWarning[];
+} {
+  const metadata = emptyCommandCenterMetadata();
+  const warnings: MatterCommandCenterWarning[] = [];
+  const seenFields = new Set<keyof MatterCommandCenterMetadata>();
+  let activeField: keyof MatterCommandCenterMetadata | null = null;
+  let activeLines: string[] = [];
+  let knownFieldCount = 0;
+
+  const finishActiveField = () => {
+    if (activeField === null) return;
+    const value = activeLines.join("\n").trim();
+    metadata[activeField] = value || null;
+    activeField = null;
+    activeLines = [];
+  };
+
+  for (const line of content.split(/\r?\n/)) {
+    const separatorIndex = line.indexOf(":");
+    const possibleLabel =
+      separatorIndex >= 0 ? line.slice(0, separatorIndex) : "";
+    const field = COMMAND_CENTER_FIELD_BY_LABEL.get(possibleLabel);
+
+    if (field) {
+      finishActiveField();
+      knownFieldCount += 1;
+      if (seenFields.has(field)) {
+        warnings.push({
+          code: "DUPLICATE_FIELD",
+          field,
+          label: possibleLabel,
+        });
+      }
+      seenFields.add(field);
+      activeField = field;
+      activeLines = [line.slice(separatorIndex + 1).replace(/^[\t ]+/, "")];
+      continue;
+    }
+
+    if (activeField !== null) {
+      activeLines.push(line);
+    }
+  }
+
+  finishActiveField();
+
+  if (content.trim().length === 0) {
+    warnings.push({ code: "EMPTY_FILE" });
+  }
+  if (knownFieldCount === 0) {
+    warnings.push({ code: "NO_KNOWN_FIELDS" });
+  }
+
+  return { metadata, warnings };
+}
 
 const WINDOWS_INVALID_SEGMENT_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f\u007f]/;
 const WINDOWS_DEVICE_NAME =
@@ -270,5 +416,39 @@ export async function resolveActiveMatter(
     radnoPath: path.win32.join(matterPath, "02 RADNO"),
     finalnoPath: path.win32.join(matterPath, "03 FINALNO"),
     aiPath: path.win32.join(matterPath, "04 AI"),
+  };
+}
+
+export async function loadMatterCommandCenter(
+  clientFolder: string,
+  matterFolder: string,
+): Promise<MatterCommandCenterResult> {
+  const resolvedMatter = await resolveActiveMatter(clientFolder, matterFolder);
+  const commandCenterPath = path.win32.join(
+    resolvedMatter.controlPath,
+    "command-center.md",
+  );
+
+  let content: string;
+  try {
+    content = await readFile(commandCenterPath, "utf8");
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return {
+      resolvedMatter,
+      commandCenterPath,
+      metadata: emptyCommandCenterMetadata(),
+      fileStatus: code === "ENOENT" ? "missing" : "unreadable",
+      warnings: [],
+    };
+  }
+
+  const parsed = parseMatterCommandCenter(content);
+  return {
+    resolvedMatter,
+    commandCenterPath,
+    metadata: parsed.metadata,
+    fileStatus: "ok",
+    warnings: parsed.warnings,
   };
 }
