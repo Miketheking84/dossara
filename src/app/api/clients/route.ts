@@ -12,8 +12,8 @@ export async function GET() {
     const entries = await readdir(clientsRoot, { withFileTypes: true });
     const clients = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort((a, b) => a.localeCompare(b));
     return NextResponse.json({ clients });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Klijenti nisu mogli biti učitani." }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Klijenti nisu mogli biti učitani." }, { status: 500 });
   }
 }
 
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
       }
       throw error;
     }
-    return NextResponse.json({ client: folderName, path: clientPath }, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Klijent nije kreiran." }, { status: 500 });
+    return NextResponse.json({ client: folderName }, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: "Klijent nije kreiran." }, { status: 500 });
   }
 }

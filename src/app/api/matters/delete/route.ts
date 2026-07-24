@@ -132,9 +132,6 @@ export async function POST(request: Request) {
     if (code === "ENOENT") {
       return NextResponse.json({ error: "Izabrani klijent ili predmet ne postoji." }, { status: 404 });
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? `Predmet nije premješten: ${error.message}` : "Predmet nije premješten." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Predmet nije premješten." }, { status: 500 });
   }
 }

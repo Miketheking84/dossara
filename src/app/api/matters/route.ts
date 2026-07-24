@@ -96,7 +96,6 @@ export async function GET() {
                   clientFolder: clientEntry.name,
                   matterFolder: entry.name,
                   matterName,
-                  matterPath,
                 };
               }),
           );
@@ -109,9 +108,9 @@ export async function GET() {
       ),
     );
     return NextResponse.json({ matters });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Aktivni predmeti nisu mogli biti učitani." },
+      { error: "Aktivni predmeti nisu mogli biti učitani." },
       { status: 500 },
     );
   }
@@ -133,9 +132,9 @@ export async function POST(request: Request) {
   let clientsRoot: string;
   try {
     clientsRoot = await getClientsRoot();
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Workspace nije konfigurisan." },
+      { error: "Workspace nije konfigurisan." },
       { status: 500 },
     );
   }
@@ -164,8 +163,8 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Provera naziva predmeta nije uspela." }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Provera naziva predmeta nije uspela." }, { status: 500 });
   }
 
   const stagingPath = path.win32.join(clientPath, `.sdj-mike-staging-${randomUUID()}`);
@@ -206,10 +205,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? `Predmet nije kreiran: ${error.message}` : "Predmet nije kreiran." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Predmet nije kreiran." }, { status: 500 });
   } finally {
     if (stagingCreated) {
       try {
@@ -222,7 +218,9 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    matterPath,
+    clientFolder,
+    matterFolder: folderName,
+    matterName: input.matterName,
     folderName,
     createdFolders: [...MATTER_FOLDERS],
     createdFiles: [...CONTROL_FILES],
