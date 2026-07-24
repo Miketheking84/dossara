@@ -5,6 +5,7 @@ import {
   MatterResolutionError,
   type MatterCommandCenterMetadata,
 } from "@/lib/sdj-matters";
+import { MatterFolderActions } from "./matter-folder-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,7 @@ export default async function MatterCockpitPage({
     throw error;
   }
 
-  const { metadata, fileStatus, warnings } = result;
+  const { metadata, fileStatus, warnings, resolvedMatter } = result;
   const clientName = metadata.client ?? clientFolder;
   const matterName = metadata.matter ?? matterFolder;
 
@@ -133,6 +134,11 @@ export default async function MatterCockpitPage({
           <p className="page-description">Klijent: {clientName}</p>
         </div>
       </header>
+
+      <MatterFolderActions
+        clientFolder={resolvedMatter.clientFolder}
+        matterFolder={resolvedMatter.matterFolder}
+      />
 
       {fileStatus !== "ok" ? (
         <section className="work-panel" style={{ marginTop: "30px" }}>
