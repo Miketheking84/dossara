@@ -1,6 +1,6 @@
 import "server-only";
 
-import { readFile, realpath, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   getActiveWorkspaceRoot,
@@ -288,6 +288,226 @@ async function requireRealPath(
       { cause: error },
     );
   }
+}
+
+async function requireNonLinkDirectory(
+  candidate: string,
+  notFoundCode: "CLIENT_NOT_FOUND" | "MATTER_NOT_FOUND",
+  notFoundMessage: string,
+) {
+  try {
+    const info = await lstat(candidate);
+    if (!info.isDirectory()) {
+      throw new MatterResolutionError(notFoundCode, notFoundMessage);
+    }
+    if (info.isSymbolicLink()) {
+      throw new MatterResolutionError(
+        "UNSAFE_FILESYSTEM_TARGET",
+        "Filesystem cilj nije bezbjedan za izmjenu.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof MatterResolutionError) throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      throw new MatterResolutionError(notFoundCode, notFoundMessage, {
+        cause: error,
+      });
+    }
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Filesystem cilj nije moguće bezbjedno provjeriti.",
+      { cause: error },
+    );
+  }
+}
+
+export async function resolveSafeClientForMutation(clientFolder: string) {
+  if (!isPlainWindowsFolderSegment(clientFolder)) {
+    throw new MatterResolutionError(
+      "INVALID_CLIENT_FOLDER",
+      "Naziv klijentskog foldera nije validan.",
+    );
+  }
+
+  const [workspaceRoot, clientsRoot] = await Promise.all([
+    getActiveWorkspaceRoot(),
+    getClientsRoot(),
+  ]);
+  const expectedClientsRoot = path.win32.join(workspaceRoot, "01 KLIJENTI");
+  if (!sameWindowsPath(clientsRoot, expectedClientsRoot)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Aktivni clients folder nije moguće bezbjedno potvrditi.",
+    );
+  }
+
+  const clientPath = path.win32.join(clientsRoot, clientFolder);
+  if (!isDirectChild(clientsRoot, clientPath)) {
+    throw new MatterResolutionError(
+      "CLIENT_OUTSIDE_WORKSPACE",
+      "Klijentski folder nije direktno unutar aktivnog workspacea.",
+    );
+  }
+
+  await requireNonLinkDirectory(
+    workspaceRoot,
+    "CLIENT_NOT_FOUND",
+    "Aktivni workspace ne postoji.",
+  );
+  await requireNonLinkDirectory(
+    clientsRoot,
+    "CLIENT_NOT_FOUND",
+    "Aktivni clients folder ne postoji.",
+  );
+  await requireNonLinkDirectory(
+    clientPath,
+    "CLIENT_NOT_FOUND",
+    "Izabrani klijentski folder ne postoji.",
+  );
+
+  const realWorkspaceRoot = await requireRealPath(
+    workspaceRoot,
+    "CLIENT_NOT_FOUND",
+    "Aktivni workspace ne postoji.",
+  );
+  if (!sameWindowsPath(workspaceRoot, realWorkspaceRoot)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Aktivni workspace nije bezbjedan za izmjenu.",
+    );
+  }
+
+  const realClientsRoot = await requireRealPath(
+    clientsRoot,
+    "CLIENT_NOT_FOUND",
+    "Aktivni clients folder ne postoji.",
+  );
+  if (!isDirectChild(realWorkspaceRoot, realClientsRoot)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Aktivni clients folder nije direktno unutar workspacea.",
+    );
+  }
+
+  const realClientPath = await requireRealPath(
+    clientPath,
+    "CLIENT_NOT_FOUND",
+    "Izabrani klijentski folder ne postoji.",
+  );
+  if (!isDirectChild(realClientsRoot, realClientPath)) {
+    throw new MatterResolutionError(
+      "CLIENT_OUTSIDE_WORKSPACE",
+      "Klijentski folder vodi izvan aktivnog workspacea.",
+    );
+  }
+
+  return {
+    workspaceRoot: realWorkspaceRoot,
+    clientsRoot: realClientsRoot,
+    clientFolder,
+    clientPath: realClientPath,
+  };
+}
+
+export async function resolveSafeMatterForMutation(
+  clientFolder: string,
+  matterFolder: string,
+): Promise<ResolvedActiveMatter> {
+  const resolvedClient = await resolveSafeClientForMutation(clientFolder);
+  if (
+    !isPlainWindowsFolderSegment(matterFolder) ||
+    !matterFolder.startsWith("SDJ_")
+  ) {
+    throw new MatterResolutionError(
+      "INVALID_MATTER_FOLDER",
+      "Naziv matter foldera nije validan.",
+    );
+  }
+
+  const matterPath = path.win32.join(resolvedClient.clientPath, matterFolder);
+  if (!isDirectChild(resolvedClient.clientPath, matterPath)) {
+    throw new MatterResolutionError(
+      "MATTER_OUTSIDE_CLIENT",
+      "Matter folder nije direktno unutar izabranog klijenta.",
+    );
+  }
+  await requireNonLinkDirectory(
+    matterPath,
+    "MATTER_NOT_FOUND",
+    "Izabrani matter folder ne postoji.",
+  );
+
+  const realMatterPath = await requireRealPath(
+    matterPath,
+    "MATTER_NOT_FOUND",
+    "Izabrani matter folder ne postoji.",
+  );
+  if (!isDirectChild(resolvedClient.clientPath, realMatterPath)) {
+    throw new MatterResolutionError(
+      "MATTER_OUTSIDE_CLIENT",
+      "Matter folder vodi izvan izabranog klijenta.",
+    );
+  }
+
+  return {
+    ...resolvedClient,
+    matterFolder,
+    matterPath: realMatterPath,
+    controlPath: path.win32.join(realMatterPath, "00 CONTROL"),
+    ulazPath: path.win32.join(realMatterPath, "01 ULAZ"),
+    radnoPath: path.win32.join(realMatterPath, "02 RADNO"),
+    finalnoPath: path.win32.join(realMatterPath, "03 FINALNO"),
+    aiPath: path.win32.join(realMatterPath, "04 AI"),
+  };
+}
+
+export async function ensureSafeDirectoryForMutation(
+  parentPath: string,
+  childFolder: string,
+) {
+  if (!isPlainWindowsFolderSegment(childFolder)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Filesystem cilj nije bezbjedan za izmjenu.",
+    );
+  }
+  const candidate = path.win32.join(parentPath, childFolder);
+  if (!isDirectChild(parentPath, candidate)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Filesystem cilj nije direktno unutar dozvoljenog roditelja.",
+    );
+  }
+
+  try {
+    await mkdir(candidate);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw new MatterResolutionError(
+        "UNSAFE_FILESYSTEM_TARGET",
+        "Filesystem cilj nije moguće bezbjedno pripremiti.",
+        { cause: error },
+      );
+    }
+  }
+  await requireNonLinkDirectory(
+    candidate,
+    "MATTER_NOT_FOUND",
+    "Arhivski folder ne postoji.",
+  );
+  const realCandidate = await requireRealPath(
+    candidate,
+    "MATTER_NOT_FOUND",
+    "Arhivski folder ne postoji.",
+  );
+  if (!isDirectChild(parentPath, realCandidate)) {
+    throw new MatterResolutionError(
+      "UNSAFE_FILESYSTEM_TARGET",
+      "Filesystem cilj vodi izvan dozvoljenog roditelja.",
+    );
+  }
+  return realCandidate;
 }
 
 export async function resolveActiveMatter(

@@ -3,11 +3,23 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
+import { resolveSafeClientForMutation } from "@/lib/sdj-matters";
 import { getClientsRoot } from "@/lib/sdj-workspace";
 
 export const runtime = "nodejs";
 
 type MatterInput = { client: string; matterName: string; legalArea: string; status: string; priority: string; description: string; nextStep: string; deadline: string; waitingFrom: string; waitingDetail: string; expectedOutput: string; openingDate: string; folderNameOverride: string };
+
+function containsPathAttempt(value: string) {
+  return (
+    value.includes("..") ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    /^[a-z]:/i.test(value) ||
+    path.win32.isAbsolute(value) ||
+    path.posix.isAbsolute(value)
+  );
+}
 
 function readInput(body: unknown): MatterInput | null {
   if (typeof body !== "object" || body === null) return null;
@@ -123,26 +135,25 @@ export async function POST(request: Request) {
   if (!input || !input.client || !input.matterName || !input.openingDate) {
     return NextResponse.json({ error: "Klijent, naziv predmeta i datum otvaranja su obavezni." }, { status: 400 });
   }
+  if (containsPathAttempt(input.matterName)) {
+    return NextResponse.json({ error: "Naziv predmeta nije validan." }, { status: 400 });
+  }
   if (!isValidIsoDate(input.openingDate)) {
     return NextResponse.json({ error: "Datum otvaranja mora biti stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
   }
   if (input.deadline && !isValidIsoDate(input.deadline)) {
     return NextResponse.json({ error: "Rok mora biti prazan ili stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
   }
-  let clientsRoot: string;
+  const clientFolder = sanitizeFolderPart(input.client, 60);
+  let clientPath: string;
   try {
-    clientsRoot = await getClientsRoot();
+    ({ clientPath } = await resolveSafeClientForMutation(clientFolder));
   } catch {
     return NextResponse.json(
-      { error: "Workspace nije konfigurisan." },
-      { status: 500 },
+      { error: "Izabrani klijent ne postoji ili nije bezbjedan." },
+      { status: 404 },
     );
   }
-  const clientFolder = sanitizeFolderPart(input.client, 60);
-  const clientPath = path.win32.join(clientsRoot, clientFolder);
-  if (!isSafeDirectChild(clientsRoot, clientPath)) return NextResponse.json({ error: "Neispravan klijent." }, { status: 400 });
-  try { const info = await stat(clientPath); if (!info.isDirectory()) throw new Error(); }
-  catch { return NextResponse.json({ error: "Izabrani klijent ne postoji." }, { status: 404 }); }
 
   const baseFolderName = makeMatterFolderName(input.openingDate, clientFolder, input.matterName);
   const overridePattern = new RegExp(`^${baseFolderName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_\\d{3}$`);

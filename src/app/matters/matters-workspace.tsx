@@ -5,7 +5,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type MatterResult = { success: boolean; clientFolder: string; matterFolder: string; matterName: string; folderName: string; createdFolders: string[]; createdFiles: string[]; errors: { item: string; message: string }[] };
 type ActiveMatter = { clientFolder: string; matterFolder: string; matterName: string };
-const today = new Date().toISOString().slice(0, 10);
+function localIsoDate(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+const today = localIsoDate();
 const LEGAL_AREAS = ["Opšte", "Ugovorno pravo", "Privredno pravo", "Parnica / sudski spor", "Naplata potraživanja", "Menično obezbeđenje", "Radno pravo", "Real estate / nepokretnosti", "Transport / Incoterms", "Due diligence", "Upravni / inspekcijski postupak", "Poresko / finansijsko", "Korporativno pravo", "Stečaj / blokada", "Izvršenje", "Drugo"];
 const STATUSES = ["Aktivan", "Čeka klijenta", "Čeka drugu stranu", "Čeka sud / organ", "U izradi", "Za finalizaciju", "Poslato", "Završeno", "Arhiva"];
 const PRIORITIES = ["Nizak", "Srednji", "Visok", "Hitno"];

@@ -6,6 +6,18 @@ import { getClientsRoot } from "@/lib/sdj-workspace";
 
 export const runtime = "nodejs";
 
+function containsPathAttempt(value: string) {
+  const trimmed = value.trim();
+  return (
+    trimmed.includes("..") ||
+    trimmed.includes("/") ||
+    trimmed.includes("\\") ||
+    /^[a-z]:/i.test(trimmed) ||
+    path.win32.isAbsolute(trimmed) ||
+    path.posix.isAbsolute(trimmed)
+  );
+}
+
 export async function GET() {
   try {
     const clientsRoot = await getClientsRoot();
@@ -21,6 +33,9 @@ export async function POST(request: Request) {
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Neispravan JSON zahtev." }, { status: 400 }); }
   const name = typeof body === "object" && body !== null && "name" in body && typeof body.name === "string" ? body.name : "";
+  if (containsPathAttempt(name)) {
+    return NextResponse.json({ error: "Unesite ispravan naziv klijenta." }, { status: 400 });
+  }
   const folderName = sanitizeFolderPart(name, 60);
   if (!folderName) return NextResponse.json({ error: "Unesite ispravan naziv klijenta." }, { status: 400 });
   try {

@@ -1,8 +1,12 @@
-import { mkdir, rename, stat } from "node:fs/promises";
+import { rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { isSafeDirectChild } from "@/lib/sdj-files";
-import { getActiveWorkspaceRoot, getClientsRoot } from "@/lib/sdj-workspace";
+import {
+  ensureSafeDirectoryForMutation,
+  MatterResolutionError,
+  resolveSafeMatterForMutation,
+} from "@/lib/sdj-matters";
 
 export const runtime = "nodejs";
 
@@ -23,16 +27,6 @@ async function pathExists(candidate: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
-  }
-}
-
-async function ensureDirectory(candidate: string) {
-  try {
-    const info = await stat(candidate);
-    if (!info.isDirectory()) throw new Error(`Putanja nije folder: ${candidate}`);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await mkdir(candidate);
   }
 }
 
@@ -64,42 +58,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [activeRoot, clientsRoot] = await Promise.all([
-      getActiveWorkspaceRoot(),
-      getClientsRoot(),
-    ]);
-    const clientPath = path.win32.join(clientsRoot, clientFolder);
-    if (!isSafeDirectChild(clientsRoot, clientPath)) {
-      return NextResponse.json({ error: "Klijent nije direktni folder u 01 KLIJENTI." }, { status: 400 });
-    }
-    const clientInfo = await stat(clientPath);
-    if (!clientInfo.isDirectory()) {
-      return NextResponse.json({ error: "Izabrani klijent nije folder." }, { status: 400 });
-    }
-
-    const sourcePath = path.win32.join(clientPath, matterFolder);
-    if (!isSafeDirectChild(clientPath, sourcePath)) {
-      return NextResponse.json({ error: "Predmet nije direktni folder izabranog klijenta." }, { status: 400 });
-    }
-    const sourceInfo = await stat(sourcePath);
-    if (!sourceInfo.isDirectory()) {
-      return NextResponse.json({ error: "Izabrani predmet nije folder." }, { status: 400 });
-    }
-
-    const archiveRoot = path.win32.join(activeRoot, "05 ARHIVA");
-    const deletedMattersRoot = path.win32.join(archiveRoot, "OBRISANI_PREDMETI");
-    const deletedClientRoot = path.win32.join(deletedMattersRoot, clientFolder);
-    if (
-      !isSafeDirectChild(activeRoot, archiveRoot) ||
-      !isSafeDirectChild(archiveRoot, deletedMattersRoot) ||
-      !isSafeDirectChild(deletedMattersRoot, deletedClientRoot)
-    ) {
-      return NextResponse.json({ error: "Arhivska destinacija nije bezbedna." }, { status: 400 });
-    }
-
-    await ensureDirectory(archiveRoot);
-    await ensureDirectory(deletedMattersRoot);
-    await ensureDirectory(deletedClientRoot);
+    const resolvedMatter = await resolveSafeMatterForMutation(
+      clientFolder,
+      matterFolder,
+    );
+    const archiveRoot = await ensureSafeDirectoryForMutation(
+      resolvedMatter.workspaceRoot,
+      "05 ARHIVA",
+    );
+    const deletedMattersRoot = await ensureSafeDirectoryForMutation(
+      archiveRoot,
+      "OBRISANI_PREDMETI",
+    );
+    const deletedClientRoot = await ensureSafeDirectoryForMutation(
+      deletedMattersRoot,
+      clientFolder,
+    );
 
     const destinationBase = `${matterFolder}__OBRISAN_${archiveTimestamp()}`;
     for (let index = 0; index <= 999; index += 1) {
@@ -111,7 +85,7 @@ export async function POST(request: Request) {
       }
       if (await pathExists(destinationPath)) continue;
       try {
-        await rename(sourcePath, destinationPath);
+        await rename(resolvedMatter.matterPath, destinationPath);
         return NextResponse.json({
           success: true,
           message: "Predmet je premješten u arhivu.",
@@ -128,6 +102,12 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   } catch (error) {
+    if (error instanceof MatterResolutionError) {
+      return NextResponse.json(
+        { error: "Klijent, predmet ili arhivska destinacija nisu bezbjedni." },
+        { status: 400 },
+      );
+    }
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
       return NextResponse.json({ error: "Izabrani klijent ili predmet ne postoji." }, { status: 404 });
