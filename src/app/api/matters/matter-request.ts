@@ -1,4 +1,7 @@
-import { validateInitialDocuments } from "../../../lib/sdj-initial-documents";
+import {
+  validateInitialDocuments,
+  type NormalizedInitialDocumentMetadata,
+} from "../../../lib/sdj-initial-documents";
 
 export type MatterInput = {
   client: string;
@@ -16,12 +19,20 @@ export type MatterInput = {
   folderNameOverride: string;
 };
 
+export type ValidatedInitialDocument = Readonly<{
+  file: File;
+  normalizedName: string;
+  extension: NormalizedInitialDocumentMetadata["extension"];
+  size: number;
+  mimeType?: string;
+}>;
+
 export type MatterRequestParseResult =
   | {
       ok: true;
       input: MatterInput | null;
       format: "json" | "multipart";
-      initialDocumentCount: number;
+      initialDocuments: readonly ValidatedInitialDocument[];
     }
   | { ok: false; error: string; status: 400 | 415 };
 
@@ -84,7 +95,7 @@ export async function parseMatterRequest(
       return { ok: false, error: "Neispravan JSON zahtev.", status: 400 };
     }
     const input = readInput(body);
-    return { ok: true, input, format: "json", initialDocumentCount: 0 };
+    return { ok: true, input, format: "json", initialDocuments: [] };
   }
 
   if (contentType !== "multipart/form-data") {
@@ -99,7 +110,7 @@ export async function parseMatterRequest(
     return { ok: false, error: "Neispravan multipart zahtev.", status: 400 };
   }
 
-  const initialDocuments: File[] = [];
+  const initialDocumentFiles: File[] = [];
   for (const [field, value] of formData.entries()) {
     if (field === INITIAL_DOCUMENT_FIELD) {
       if (!(value instanceof File)) {
@@ -109,7 +120,7 @@ export async function parseMatterRequest(
           status: 400,
         };
       }
-      initialDocuments.push(value);
+      initialDocumentFiles.push(value);
     } else if (value instanceof File) {
       return {
         ok: false,
@@ -147,7 +158,7 @@ export async function parseMatterRequest(
   }
 
   const validation = validateInitialDocuments(
-    initialDocuments.map((file) => ({
+    initialDocumentFiles.map((file) => ({
       name: file.name,
       size: file.size,
       mimeType: file.type,
@@ -161,10 +172,40 @@ export async function parseMatterRequest(
     };
   }
 
+  // Defensive invariant: validated metadata must stay index-aligned with parsed Files.
+  if (validation.documents.length !== initialDocumentFiles.length) {
+    return {
+      ok: false,
+      error: INITIAL_DOCUMENT_VALIDATION_MESSAGE,
+      status: 400,
+    };
+  }
+
+  const initialDocuments: ValidatedInitialDocument[] = [];
+  for (const [index, metadata] of validation.documents.entries()) {
+    const file = initialDocumentFiles[index];
+    if (!file) {
+      return {
+        ok: false,
+        error: INITIAL_DOCUMENT_VALIDATION_MESSAGE,
+        status: 400,
+      };
+    }
+    initialDocuments.push({
+      file,
+      normalizedName: metadata.name,
+      extension: metadata.extension,
+      size: metadata.size,
+      ...(metadata.mimeType === undefined
+        ? {}
+        : { mimeType: metadata.mimeType }),
+    });
+  }
+
   return {
     ok: true,
     input,
     format: "multipart",
-    initialDocumentCount: initialDocuments.length,
+    initialDocuments,
   };
 }

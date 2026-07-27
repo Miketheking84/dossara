@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   INITIAL_DOCUMENT_MAX_FILE_COUNT,
   INITIAL_DOCUMENT_MAX_FILE_SIZE_BYTES,
@@ -95,9 +95,18 @@ function requestWithParsedFormData(formData: FormData) {
     headers: { "Content-Type": "multipart/form-data" },
   });
   Object.defineProperty(request, "formData", {
+    configurable: true,
     value: async () => formData,
   });
   return request;
+}
+
+function parsedMultipartRequest(files: readonly File[]) {
+  const formData = validMultipartFormData();
+  for (const file of files) {
+    formData.append("initialDocuments", file);
+  }
+  return requestWithParsedFormData(formData);
 }
 
 async function expectParsed(request: Request) {
@@ -122,8 +131,14 @@ describe("parseMatterRequest JSON compatibility", () => {
       ok: true,
       input: validInput,
       format: "json",
-      initialDocumentCount: 0,
+      initialDocuments: [],
     });
+  });
+
+  it("does not retain the obsolete initialDocumentCount property", async () => {
+    const result = await expectParsed(jsonRequest(validInput));
+
+    expect(result).not.toHaveProperty("initialDocumentCount");
   });
 
   it.each([
@@ -161,7 +176,7 @@ describe("parseMatterRequest JSON compatibility", () => {
       waitingDetail: "",
       folderNameOverride: "",
     });
-    expect(result.initialDocumentCount).toBe(0);
+    expect(result.initialDocuments).toEqual([]);
   });
 
   it("rejects malformed JSON with the existing controlled error", async () => {
@@ -180,7 +195,7 @@ describe("parseMatterRequest JSON compatibility", () => {
     const result = await expectParsed(jsonRequest(null));
 
     expect(result.input).toBeNull();
-    expect(result.initialDocumentCount).toBe(0);
+    expect(result.initialDocuments).toEqual([]);
   });
 });
 
@@ -190,7 +205,7 @@ describe("parseMatterRequest multipart input", () => {
 
     expect(result.format).toBe("multipart");
     expect(result.input).toEqual(validInput);
-    expect(result.initialDocumentCount).toBe(0);
+    expect(result.initialDocuments).toEqual([]);
   });
 
   it("accepts multipart/form-data with a generated boundary", async () => {
@@ -215,35 +230,122 @@ describe("parseMatterRequest multipart input", () => {
     });
   });
 
-  it("accepts one valid File metadata entry", async () => {
-    const result = await expectParsed(
-      multipartRequest([
-        {
-          file: new File(["pdf"], "document.pdf", {
-            type: "application/pdf",
-          }),
-        },
-      ]),
-    );
+  it("returns one validated document with the original File and validated metadata", async () => {
+    const file = new File(["pdf"], "document.PDF", {
+      type: "application/pdf",
+    });
+    const result = await expectParsed(parsedMultipartRequest([file]));
 
-    expect(result.initialDocumentCount).toBe(1);
+    expect(result.initialDocuments).toEqual([
+      {
+        file,
+        normalizedName: "document.PDF",
+        extension: ".pdf",
+        size: file.size,
+        mimeType: "application/pdf",
+      },
+    ]);
+    expect(result.initialDocuments[0]?.file).toBe(file);
   });
 
-  it("accepts multiple valid File metadata entries", async () => {
-    const result = await expectParsed(
-      multipartRequest([
-        {
-          file: new File(["pdf"], "document.pdf", {
-            type: "application/pdf",
-          }),
-        },
-        {
-          file: new File(["text"], "notes.txt", { type: "text/plain" }),
-        },
-      ]),
-    );
+  it("preserves File identity, selection order, and index mapping", async () => {
+    const files = [
+      new File(["a"], "first.PDF", { type: "application/pdf" }),
+      new File(["bbbb"], "second.TXT", { type: "text/plain" }),
+      new File(["ccc"], "third.DOCX", {
+        type:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    ];
+    const result = await expectParsed(parsedMultipartRequest(files));
 
-    expect(result.initialDocumentCount).toBe(2);
+    expect(
+      result.initialDocuments.map(
+        ({ file, normalizedName, extension, size }) => ({
+          file,
+          normalizedName,
+          extension,
+          size,
+        }),
+      ),
+    ).toEqual([
+      {
+        file: files[0],
+        normalizedName: "first.PDF",
+        extension: ".pdf",
+        size: 1,
+      },
+      {
+        file: files[1],
+        normalizedName: "second.TXT",
+        extension: ".txt",
+        size: 4,
+      },
+      {
+        file: files[2],
+        normalizedName: "third.DOCX",
+        extension: ".docx",
+        size: 3,
+      },
+    ]);
+    expect(result.initialDocuments.map(({ file }) => file)).toEqual(files);
+  });
+
+  it("returns an NFC-normalized name from validator output", async () => {
+    const file = new File(["pdf"], "cafe\u0301.PDF", {
+      type: "application/pdf",
+    });
+    const result = await expectParsed(parsedMultipartRequest([file]));
+
+    expect(file.name).toBe("cafe\u0301.PDF");
+    expect(result.initialDocuments[0]?.normalizedName).toBe("caf\u00e9.PDF");
+    expect(result.initialDocuments[0]?.extension).toBe(".pdf");
+  });
+
+  it("does not expose a path or duplicate File metadata on the wrapper", async () => {
+    const file = new File(["pdf"], "document.pdf", {
+      type: "application/pdf",
+    });
+    const result = await expectParsed(parsedMultipartRequest([file]));
+    const document = result.initialDocuments[0];
+
+    expect(document).toBeDefined();
+    expect(Object.keys(document ?? {})).toEqual([
+      "file",
+      "normalizedName",
+      "extension",
+      "size",
+      "mimeType",
+    ]);
+    expect(document).not.toHaveProperty("path");
+    expect(document).not.toHaveProperty("name");
+    expect(result).not.toHaveProperty("path");
+  });
+
+  it("parses FormData once without reading or cloning File content", async () => {
+    const file = new File(["pdf"], "document.pdf", {
+      type: "application/pdf",
+    });
+    const formData = validMultipartFormData();
+    formData.append("initialDocuments", file, file.name);
+    const parsedFile = formData.get("initialDocuments");
+    if (!(parsedFile instanceof File)) {
+      throw new Error("Expected the parsed FormData entry to be a File.");
+    }
+    const request = requestWithParsedFormData(formData);
+    const formDataSpy = vi.fn(async () => formData);
+    Object.defineProperty(request, "formData", { value: formDataSpy });
+    const arrayBufferSpy = vi.spyOn(parsedFile, "arrayBuffer");
+    const textSpy = vi.spyOn(parsedFile, "text");
+    const streamSpy = vi.spyOn(parsedFile, "stream");
+
+    const result = await expectParsed(request);
+
+    expect(formDataSpy).toHaveBeenCalledTimes(1);
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    expect(textSpy).not.toHaveBeenCalled();
+    expect(streamSpy).not.toHaveBeenCalled();
+    expect(result.initialDocuments[0]?.file).toBe(parsedFile);
   });
 
   it.each([
@@ -333,6 +435,7 @@ describe("parseMatterRequest multipart input", () => {
     expect(result.error).toBe(
       "Početna dokumentacija nije prihvaćena. Provjerite tip, naziv, broj i veličinu fajlova.",
     );
+    expect(result).not.toHaveProperty("initialDocuments");
   });
 
   it("provides a route guard state before filesystem mutation", async () => {
@@ -342,9 +445,9 @@ describe("parseMatterRequest multipart input", () => {
 
     expect(result).toMatchObject({
       format: "multipart",
-      initialDocumentCount: 1,
+      initialDocuments: [{ normalizedName: "document.pdf" }],
     });
-    expect(result.initialDocumentCount).toBeGreaterThan(0);
+    expect(result.initialDocuments.length).toBeGreaterThan(0);
   });
 
   it("rejects a forbidden extension with a browser-safe error", async () => {

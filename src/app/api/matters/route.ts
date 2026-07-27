@@ -143,7 +143,7 @@ export async function POST(request: Request) {
   if (input.deadline && !isValidIsoDate(input.deadline)) {
     return NextResponse.json({ error: "Rok mora biti prazan ili stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
   }
-  if (parsedRequest.initialDocumentCount > 0) {
+  if (parsedRequest.initialDocuments.length > 0) {
     return NextResponse.json({ error: INITIAL_DOCUMENT_STORAGE_PENDING_MESSAGE }, { status: 501 });
   }
   const clientFolder = sanitizeFolderPart(input.client, 60);
