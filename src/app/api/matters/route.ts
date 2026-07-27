@@ -5,10 +5,14 @@ import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, markdownValue, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
 import { resolveSafeClientForMutation } from "@/lib/sdj-matters";
 import { getClientsRoot } from "@/lib/sdj-workspace";
+import {
+  parseMatterRequest,
+  type MatterInput,
+} from "./matter-request";
 
 export const runtime = "nodejs";
 
-type MatterInput = { client: string; matterName: string; legalArea: string; status: string; priority: string; description: string; nextStep: string; deadline: string; waitingFrom: string; waitingDetail: string; expectedOutput: string; openingDate: string; folderNameOverride: string };
+const INITIAL_DOCUMENT_STORAGE_PENDING_MESSAGE = "Server-side čuvanje početne dokumentacije još nije aktivirano.";
 
 function containsPathAttempt(value: string) {
   return (
@@ -19,13 +23,6 @@ function containsPathAttempt(value: string) {
     path.win32.isAbsolute(value) ||
     path.posix.isAbsolute(value)
   );
-}
-
-function readInput(body: unknown): MatterInput | null {
-  if (typeof body !== "object" || body === null) return null;
-  const value = body as Record<string, unknown>;
-  const get = (key: keyof MatterInput) => typeof value[key] === "string" ? value[key].trim() : "";
-  return { client:get("client"), matterName:get("matterName"), legalArea:get("legalArea") || "Opšte", status:get("status") || "Aktivan", priority:get("priority") || "Srednji", description:get("description"), nextStep:get("nextStep"), deadline:get("deadline"), waitingFrom:get("waitingFrom") || "Niko / nije primenljivo", waitingDetail:get("waitingDetail"), expectedOutput:get("expectedOutput"), openingDate:get("openingDate"), folderNameOverride:get("folderNameOverride") };
 }
 
 function controlContents(input: MatterInput) {
@@ -129,9 +126,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "Neispravan JSON zahtev." }, { status: 400 }); }
-  const input = readInput(body);
+  const parsedRequest = await parseMatterRequest(request);
+  if (!parsedRequest.ok) {
+    return NextResponse.json({ error: parsedRequest.error }, { status: parsedRequest.status });
+  }
+  const { input } = parsedRequest;
   if (!input || !input.client || !input.matterName || !input.openingDate) {
     return NextResponse.json({ error: "Klijent, naziv predmeta i datum otvaranja su obavezni." }, { status: 400 });
   }
@@ -143,6 +142,9 @@ export async function POST(request: Request) {
   }
   if (input.deadline && !isValidIsoDate(input.deadline)) {
     return NextResponse.json({ error: "Rok mora biti prazan ili stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
+  }
+  if (parsedRequest.initialDocumentCount > 0) {
+    return NextResponse.json({ error: INITIAL_DOCUMENT_STORAGE_PENDING_MESSAGE }, { status: 501 });
   }
   const clientFolder = sanitizeFolderPart(input.client, 60);
   let clientPath: string;
