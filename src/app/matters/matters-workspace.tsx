@@ -8,7 +8,7 @@ import {
   type InitialDocumentValidationResult,
 } from "@/lib/sdj-initial-documents";
 
-type MatterResult = { success: boolean; clientFolder: string; matterFolder: string; matterName: string; folderName: string; createdFolders: string[]; createdFiles: string[]; errors: { item: string; message: string }[] };
+type MatterResult = { success: boolean; clientFolder: string; matterFolder: string; matterName: string; folderName: string; createdFolders: string[]; createdFiles: string[]; errors: { item: string; message: string }[]; initialDocumentsSaved?: number };
 type ActiveMatter = { clientFolder: string; matterFolder: string; matterName: string };
 function localIsoDate(date = new Date()) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -50,6 +50,7 @@ export function MattersWorkspace() {
   const [activeMatters,setActiveMatters]=useState<ActiveMatter[]>([]); const [mattersLoading,setMattersLoading]=useState(true); const [mattersMessage,setMattersMessage]=useState(""); const [movingMatter,setMovingMatter]=useState(""); const [pendingMoveMatter,setPendingMoveMatter]=useState<ActiveMatter|null>(null);
   const baseProposal=useMemo(()=>matterName&&client?`SDJ_${openingDate}_${normalize(client)}_${normalize(matterName)}`.slice(0,140).replace(/_+$/g,""):"",[client,matterName,openingDate]);
   const proposal=folderOverride||baseProposal;
+  const savedInitialDocumentsCount=result&&typeof result.initialDocumentsSaved==="number"&&Number.isFinite(result.initialDocumentsSaved)&&result.initialDocumentsSaved>0?result.initialDocumentsSaved:0;
 
   useEffect(()=>{let active=true;fetch("/api/clients",{cache:"no-store"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error);if(active){setClients(data.clients);setClient(data.clients[0]||"");}}).catch(error=>{if(active)setClientMessage(error instanceof Error?error.message:"Klijenti nisu učitani.");}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
   useEffect(()=>{let active=true;fetch("/api/matters",{cache:"no-store"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error);if(active)setActiveMatters(data.matters);}).catch(error=>{if(active)setMattersMessage(error instanceof Error?error.message:"Aktivni predmeti nisu učitani.");}).finally(()=>{if(active)setMattersLoading(false);});return()=>{active=false;};},[]);
@@ -95,7 +96,7 @@ export function MattersWorkspace() {
         <button className="primary-action" type="submit" disabled={pending||!clients.length}>{pending?"Kreiram predmet…":"Create Matter"}</button>
       </form>
       {matterError&&<div className="duplicate-message" role="alert"><p>{matterError}</p>{suggestedFolder&&<><code>{suggestedFolder}</code><button type="button" onClick={()=>{setFolderOverride(suggestedFolder);setSuggestedFolder("");setMatterError("");}}>Predloži novi naziv</button></>}</div>}
-      {result&&<section className="matter-result" aria-live="polite"><div className="result-heading"><h3>{result.success?"Matter created successfully":"Matter created with errors"}</h3><button type="button" onClick={openFolder}>Open Matter Folder</button></div><code className="matter-path">{result.matterFolder}</code><ResultList label="Kreirani folderi" items={result.createdFolders}/><ResultList label="Kreirani control files" items={result.createdFiles}/><ResultList label="Errors" items={result.errors.map(error=>`${error.item}: ${error.message}`)}/></section>}
+      {result&&<section className="matter-result" aria-live="polite"><div className="result-heading"><h3>{result.success?"Matter created successfully":"Matter created with errors"}</h3><button type="button" onClick={openFolder}>Open Matter Folder</button></div>{savedInitialDocumentsCount>0&&<div className="created-list"><p>Početna dokumentacija sačuvana: {savedInitialDocumentsCount} {savedInitialDocumentsCount===1?"fajl":"fajla"}.</p></div>}<code className="matter-path">{result.matterFolder}</code><ResultList label="Kreirani folderi" items={result.createdFolders}/><ResultList label="Kreirani control files" items={result.createdFiles}/><ResultList label="Errors" items={result.errors.map(error=>`${error.item}: ${error.message}`)}/></section>}
     </section>
   </div>
     <section className="work-panel active-matters-panel">
