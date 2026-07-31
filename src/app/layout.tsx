@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { BRAND } from "@/brand/config";
 import { Sidebar } from "./components/sidebar";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SDJ MIKE V1",
-  description: "Legal Command Center",
+  title: BRAND.applicationTitle,
+  description: BRAND.metadataDescription,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

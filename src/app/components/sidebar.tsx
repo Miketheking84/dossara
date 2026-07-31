@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BRAND } from "@/brand/config";
 
 const items = [
   { label: "Today", href: "/", icon: "home" },
@@ -29,8 +30,8 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">SM</div>
-        <div><strong>SDJ MIKE V1</strong><span>Legal Command Center</span></div>
+        <div className="brand-mark">{BRAND.shortMark}</div>
+        <div><strong>{BRAND.editionName}</strong><span>{BRAND.tagline}</span></div>
       </div>
       <nav aria-label="Glavna navigacija">
         {items.map((item) => {
