@@ -1,0 +1,24 @@
+{
+  "Navigation": {
+    "today": "Today",
+    "inbox": "Inbox",
+    "matters": "Matters",
+    "prompts": "Prompts",
+    "settings": "Settings",
+    "localOnly": "Local only",
+    "mainNavigation": "Main navigation"
+  },
+  "Settings": {
+    "sectionLabel": "Configuration",
+    "title": "Settings",
+    "description": "Configure the local SDJ_LEGAL working folder.",
+    "language": "Language",
+    "languageHelp": "Choose the language for the application interface.",
+    "serbianLatin": "Serbian — Latin",
+    "english": "English",
+    "saveLanguage": "Save language",
+    "savingLanguage": "Saving language…",
+    "languageSaved": "Language saved.",
+    "languageSaveFailed": "The language could not be saved."
+  }
+}

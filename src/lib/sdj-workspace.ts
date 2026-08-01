@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isAppLocale, type AppLocale } from "@/i18n/config";
 
 const CONFIG_DIRECTORY = path.join(process.cwd(), ".sdj-mike");
 const CONFIG_PATH = path.join(CONFIG_DIRECTORY, "settings.json");
@@ -10,6 +11,7 @@ export const WORKSPACE_NOT_CONFIGURED_MESSAGE =
 type WorkspaceSettings = {
   allowedTestRoot: string;
   activeRootPath?: string;
+  uiLocale?: AppLocale;
 };
 
 function normalizeWindowsPath(value: string) {
@@ -50,6 +52,7 @@ async function readSettings(): Promise<WorkspaceSettings> {
         typeof value.activeRootPath === "string"
           ? normalizeWindowsPath(value.activeRootPath)
           : undefined,
+      uiLocale: isAppLocale(value.uiLocale) ? value.uiLocale : undefined,
     };
   } catch {
     throw new Error(

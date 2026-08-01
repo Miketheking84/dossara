@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { BRAND } from "@/brand/config";
 
 const items = [
-  { label: "Today", href: "/", icon: "home" },
-  { label: "Inbox", href: "/inbox", icon: "inbox" },
-  { label: "Matters", href: "/matters", icon: "folder" },
-  { label: "Prompts", href: "/prompts", icon: "document" },
-  { label: "Settings", href: "/settings", icon: "settings" },
+  { key: "today", href: "/", icon: "home" },
+  { key: "inbox", href: "/inbox", icon: "inbox" },
+  { key: "matters", href: "/matters", icon: "folder" },
+  { key: "prompts", href: "/prompts", icon: "document" },
+  { key: "settings", href: "/settings", icon: "settings" },
 ] as const;
 
 function Icon({ name }: { name: (typeof items)[number]["icon"] }) {
@@ -26,6 +27,7 @@ function Icon({ name }: { name: (typeof items)[number]["icon"] }) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const t = useTranslations("Navigation");
 
   return (
     <aside className="sidebar">
@@ -33,13 +35,13 @@ export function Sidebar() {
         <div className="brand-mark">{BRAND.shortMark}</div>
         <div><strong>{BRAND.editionName}</strong><span>{BRAND.tagline}</span></div>
       </div>
-      <nav aria-label="Glavna navigacija">
+      <nav aria-label={t("mainNavigation")}>
         {items.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return <Link key={item.href} href={item.href} className={active ? "active" : ""}><Icon name={item.icon}/><span>{item.label}</span></Link>;
+          return <Link key={item.href} href={item.href} className={active ? "active" : ""}><Icon name={item.icon}/><span>{t(item.key)}</span></Link>;
         })}
       </nav>
-      <p className="local-only"><span aria-hidden="true" />Local only</p>
+      <p className="local-only"><span aria-hidden="true" />{t("localOnly")}</p>
     </aside>
   );
 }

@@ -1,0 +1,24 @@
+{
+  "Navigation": {
+    "today": "Danas",
+    "inbox": "Prijem",
+    "matters": "Predmeti",
+    "prompts": "Promptovi",
+    "settings": "Podešavanja",
+    "localOnly": "Samo lokalno",
+    "mainNavigation": "Glavna navigacija"
+  },
+  "Settings": {
+    "sectionLabel": "Konfiguracija",
+    "title": "Podešavanja",
+    "description": "Podesite lokalni SDJ_LEGAL radni folder.",
+    "language": "Jezik",
+    "languageHelp": "Izaberite jezik korisničkog interfejsa aplikacije.",
+    "serbianLatin": "Srpski — latinica",
+    "english": "English",
+    "saveLanguage": "Sačuvaj jezik",
+    "savingLanguage": "Čuvanje jezika…",
+    "languageSaved": "Jezik je sačuvan.",
+    "languageSaveFailed": "Jezik nije moguće sačuvati."
+  }
+}

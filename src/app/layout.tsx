@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import { BRAND } from "@/brand/config";
 import { Sidebar } from "./components/sidebar";
 import "./globals.css";
@@ -8,14 +11,19 @@ export const metadata: Metadata = {
   description: BRAND.metadataDescription,
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  await connection();
+  const locale = await getLocale();
+
   return (
-    <html lang="sr-Latn">
+    <html lang={locale}>
       <body>
-        <div className="app-shell">
-          <Sidebar />
-          <main className="workspace">{children}</main>
-        </div>
+        <NextIntlClientProvider>
+          <div className="app-shell">
+            <Sidebar />
+            <main className="workspace">{children}</main>
+          </div>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
