@@ -84,6 +84,17 @@
     "title": "Predmeti",
     "description": "Kreirajte lokalne klijente i strukturu novog predmeta."
   },
+  "MattersWorkspace": {
+    "clients": "Klijenti",
+    "foldersIn": "Folderi u {folder}",
+    "newClient": "Novi klijent",
+    "clientNamePlaceholder": "Naziv klijenta",
+    "createClient": "Kreiraj klijenta",
+    "loading": "Učitavanje…",
+    "noClients": "Nema klijenata.",
+    "clientsUnavailable": "Klijenti nijesu učitani.",
+    "clientCreated": "Klijent {client} je kreiran."
+  },
   "PromptGenerator": {
     "sectionLabel": "AI rad",
     "title": "Generator promptova",

@@ -84,6 +84,17 @@
     "title": "Matters",
     "description": "Create local clients and a new matter structure."
   },
+  "MattersWorkspace": {
+    "clients": "Clients",
+    "foldersIn": "Folders in {folder}",
+    "newClient": "New client",
+    "clientNamePlaceholder": "Client name",
+    "createClient": "Create client",
+    "loading": "Loading…",
+    "noClients": "No clients.",
+    "clientsUnavailable": "Clients could not be loaded.",
+    "clientCreated": "Client {client} was created."
+  },
   "PromptGenerator": {
     "sectionLabel": "AI work",
     "title": "Prompt generator",
