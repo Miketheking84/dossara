@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import type en from "@/i18n/messages/en.json";
 import {
   loadMatterCommandCenter,
   MatterResolutionError,
@@ -9,41 +11,30 @@ import { MatterFolderActions } from "./matter-folder-actions";
 
 export const dynamic = "force-dynamic";
 
+type MatterCockpitKey = keyof typeof en.MatterCockpit;
 type MetadataItem = readonly [
-  label: string,
+  label: MatterCockpitKey,
   field: keyof MatterCommandCenterMetadata,
 ];
 
 const BASIC_ITEMS = [
-  ["Klijent", "client"],
-  ["Predmet", "matter"],
-  ["Datum otvaranja", "openedAt"],
-  ["Oblast prava", "legalArea"],
+  ["client", "client"], ["matter", "matter"], ["openedAt", "openedAt"], ["legalArea", "legalArea"],
 ] as const satisfies readonly MetadataItem[];
 
 const FLOW_ITEMS = [
-  ["Status", "status"],
-  ["Prioritet", "priority"],
-  ["Sledeći korak", "nextStep"],
-  ["Čeka se od", "waitingFor"],
-  ["Detalj čekanja / napomena", "waitingDetail"],
-  ["Rok", "deadline"],
+  ["status", "status"], ["priority", "priority"], ["nextStep", "nextStep"], ["waitingFor", "waitingFor"], ["waitingDetail", "waitingDetail"], ["deadline", "deadline"],
 ] as const satisfies readonly MetadataItem[];
 
 const LEGAL_ITEMS = [
-  ["Kratak opis", "shortDescription"],
-  ["Ključna pitanja", "keyQuestions"],
-  ["Rizici", "risks"],
+  ["shortDescription", "shortDescription"], ["keyQuestions", "keyQuestions"], ["risks", "risks"],
 ] as const satisfies readonly MetadataItem[];
 
 const OUTPUT_ITEMS = [
-  ["Očekivani output", "expectedOutput"],
-  ["Status outputa", "outputStatus"],
+  ["expectedOutput", "expectedOutput"], ["outputStatus", "outputStatus"],
 ] as const satisfies readonly MetadataItem[];
 
 const FINAL_ITEMS = [
-  ["Finalni dokument", "finalDocument"],
-  ["Finalni cilj", "finalGoal"],
+  ["finalDocument", "finalDocument"], ["finalGoal", "finalGoal"],
 ] as const satisfies readonly MetadataItem[];
 
 const detailListStyle = {
@@ -70,18 +61,20 @@ const detailValueStyle = {
   whiteSpace: "pre-wrap",
 } as const;
 
-function displayValue(value: string | null) {
-  return value ?? "Nije navedeno";
+function displayValue(value: string | null, fallback: string) {
+  return value ?? fallback;
 }
 
 function MetadataSection({
   title,
   items,
   metadata,
+  translate,
 }: {
   title: string;
   items: readonly MetadataItem[];
   metadata: MatterCommandCenterMetadata;
+  translate: (key: MatterCockpitKey) => string;
 }) {
   return (
     <section className="work-panel">
@@ -93,8 +86,8 @@ function MetadataSection({
       <dl style={{ ...detailListStyle, padding: "22px 24px" }}>
         {items.map(([label, field]) => (
           <div key={field} style={detailRowStyle}>
-            <dt style={detailTermStyle}>{label}</dt>
-            <dd style={detailValueStyle}>{displayValue(metadata[field])}</dd>
+            <dt style={detailTermStyle}>{translate(label)}</dt>
+            <dd style={detailValueStyle}>{displayValue(metadata[field], translate("notProvided"))}</dd>
           </div>
         ))}
       </dl>
@@ -107,6 +100,7 @@ export default async function MatterCockpitPage({
 }: {
   params: Promise<{ clientFolder: string; matterFolder: string }>;
 }) {
+  const t = await getTranslations("MatterCockpit");
   const { clientFolder, matterFolder } = await params;
 
   let result;
@@ -123,15 +117,15 @@ export default async function MatterCockpitPage({
 
   return (
     <main className="page-section">
-      <nav aria-label="Povratak na Matters" style={{ marginBottom: "24px" }}>
-        <Link href="/matters">← Nazad na Matters</Link>
+      <nav aria-label={t("back")} style={{ marginBottom: "24px" }}>
+        <Link href="/matters">← {t("back")}</Link>
       </nav>
 
       <header className="page-header">
         <div>
-          <p className="section-label">Matter Cockpit</p>
+          <p className="section-label">{t("title")}</p>
           <h1>{matterName}</h1>
-          <p className="page-description">Klijent: {clientName}</p>
+          <p className="page-description">{t("client")}: {clientName}</p>
         </div>
       </header>
 
@@ -141,7 +135,7 @@ export default async function MatterCockpitPage({
       />
       <nav
         className="matter-cockpit-prompt-action"
-        aria-label="AI akcije predmeta"
+        aria-label={t("aiActions")}
       >
         <Link
           href={{
@@ -152,7 +146,7 @@ export default async function MatterCockpitPage({
             },
           }}
         >
-          Generate Prompt
+          {t("generatePrompt")}
         </Link>
       </nav>
 
@@ -160,21 +154,20 @@ export default async function MatterCockpitPage({
         <section className="work-panel" style={{ marginTop: "30px" }}>
           <div className="panel-heading">
             <div>
-              <h2>Podaci predmeta</h2>
+              <h2>{t("matterData")}</h2>
               <p>
                 {fileStatus === "missing"
-                  ? "command-center.md nije pronađen za ovaj predmet."
-                  : "command-center.md postoji, ali trenutno nije moguće pročitati njegov sadržaj."}
+                  ? t("controlMissing") : t("controlUnreadable")}
               </p>
             </div>
           </div>
           <dl style={{ ...detailListStyle, padding: "22px 24px" }}>
             <div style={detailRowStyle}>
-              <dt style={detailTermStyle}>Klijent</dt>
+              <dt style={detailTermStyle}>{t("client")}</dt>
               <dd style={detailValueStyle}>{clientFolder}</dd>
             </div>
             <div style={detailRowStyle}>
-              <dt style={detailTermStyle}>Matter folder</dt>
+              <dt style={detailTermStyle}>{t("matterFolder")}</dt>
               <dd style={detailValueStyle}>{matterFolder}</dd>
             </div>
           </dl>
@@ -184,8 +177,7 @@ export default async function MatterCockpitPage({
           <section className="work-panel" style={{ marginTop: "30px" }}>
             <div className="panel-heading">
               <div>
-                <h2>Pregled</h2>
-                <p>Najvažniji podaci aktivnog predmeta</p>
+                <h2>{t("overview")}</h2><p>{t("overviewHelp")}</p>
               </div>
             </div>
             <dl
@@ -198,11 +190,7 @@ export default async function MatterCockpitPage({
               }}
             >
               {[
-                ["Klijent", clientName],
-                ["Predmet", matterName],
-                ["Status", displayValue(metadata.status)],
-                ["Prioritet", displayValue(metadata.priority)],
-                ["Rok", displayValue(metadata.deadline)],
+                [t("client"), clientName], [t("matter"), matterName], [t("status"), displayValue(metadata.status, t("notProvided"))], [t("priority"), displayValue(metadata.priority, t("notProvided"))], [t("deadline"), displayValue(metadata.deadline, t("notProvided"))],
               ].map(([label, value]) => (
                 <div key={label} style={detailRowStyle}>
                   <dt style={detailTermStyle}>{label}</dt>
@@ -214,8 +202,7 @@ export default async function MatterCockpitPage({
 
           {warnings.length > 0 ? (
             <p className="active-matters-message" role="status">
-              Neki podaci u command-center.md nisu mogli biti potpuno
-              protumačeni.
+              {t("warning")}
             </p>
           ) : null}
 
@@ -227,29 +214,34 @@ export default async function MatterCockpitPage({
             }}
           >
             <MetadataSection
-              title="Osnovni podaci"
+              title={t("basic")}
               items={BASIC_ITEMS}
               metadata={metadata}
+              translate={t}
             />
             <MetadataSection
-              title="Tok predmeta"
+              title={t("flow")}
               items={FLOW_ITEMS}
               metadata={metadata}
+              translate={t}
             />
             <MetadataSection
-              title="Pravna analiza"
+              title={t("legal")}
               items={LEGAL_ITEMS}
               metadata={metadata}
+              translate={t}
             />
             <MetadataSection
-              title="Očekivani rezultat"
+              title={t("expected")}
               items={OUTPUT_ITEMS}
               metadata={metadata}
+              translate={t}
             />
             <MetadataSection
-              title="Finalizacija"
+              title={t("finalization")}
               items={FINAL_ITEMS}
               metadata={metadata}
+              translate={t}
             />
           </div>
         </>
