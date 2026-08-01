@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 const PROMPT_TYPES = [
   { slug: "INTAKE_AGENT", label: "Intake Agent" },
@@ -122,17 +123,17 @@ function readSaveResponse(value: unknown): SavedPromptConfirmation | null {
   };
 }
 
-function saveErrorMessage(status: number) {
+function saveErrorMessage(status: number, t: ReturnType<typeof useTranslations>) {
   if (status === 400) {
-    return "Podaci za čuvanje prompta nisu validni. Generišite prompt ponovo.";
+    return t("saveInvalid");
   }
   if (status === 404) {
-    return "Predmet ili potrebni lokalni fajlovi nisu dostupni.";
+    return t("saveMissing");
   }
   if (status === 409) {
-    return "Prompt trenutno nije moguće sačuvati zbog konflikta imena. Pokušajte ponovo.";
+    return t("saveConflict");
   }
-  return "Prompt trenutno nije moguće sačuvati. Pokušajte ponovo.";
+  return t("saveFailed");
 }
 
 function matterKey(matter: ActiveMatter) {
@@ -140,6 +141,7 @@ function matterKey(matter: ActiveMatter) {
 }
 
 export function PromptGenerator() {
+  const t = useTranslations("PromptGenerator");
   const searchParams = useSearchParams();
   const initialQuerySelection = useRef({
     clientFolder: searchParams.get("clientFolder"),
@@ -192,7 +194,7 @@ export function PromptGenerator() {
           return;
         }
         setMattersError(
-          "Predmeti trenutno nisu dostupni. Pokušajte ponovo kasnije.",
+          t("mattersUnavailable"),
         );
       } finally {
         if (!controller.signal.aborted) setMattersLoading(false);
@@ -201,7 +203,7 @@ export function PromptGenerator() {
 
     void loadMatters();
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   function invalidateResult() {
     resultVersion.current += 1;
@@ -260,7 +262,7 @@ export function PromptGenerator() {
     } catch {
       if (resultVersion.current === requestVersion) {
         setGenerateError(
-          "Prompt trenutno nije moguće generisati. Proverite izbor i pokušajte ponovo.",
+          t("generateFailed"),
         );
       }
     } finally {
@@ -276,12 +278,12 @@ export function PromptGenerator() {
       );
       setClipboardStatus(
         target === "chatgpt"
-          ? "Prompt za ChatGPT je kopiran."
-          : "Claude Review prompt je kopiran.",
+          ? t("copiedChatGpt")
+          : t("copiedClaude"),
       );
     } catch {
       setClipboardStatus(
-        "Prompt nije moguće kopirati. Označite tekst i kopirajte ga ručno.",
+        t("copyFailed"),
       );
     }
   }
@@ -303,7 +305,7 @@ export function PromptGenerator() {
       });
       if (!response.ok) {
         if (resultVersion.current === requestVersion) {
-          setSaveError(saveErrorMessage(response.status));
+          setSaveError(saveErrorMessage(response.status, t));
         }
         return;
       }
@@ -311,16 +313,16 @@ export function PromptGenerator() {
       const savedPrompt = readSaveResponse(data);
       if (!savedPrompt) {
         if (resultVersion.current === requestVersion) {
-          setSaveError(saveErrorMessage(500));
+          setSaveError(saveErrorMessage(500, t));
         }
         return;
       }
       if (resultVersion.current === requestVersion) {
-        setSaveSuccess(`Sačuvano: ${savedPrompt.relativePath}`);
+        setSaveSuccess(t("saved", { path: savedPrompt.relativePath }));
       }
     } catch {
       if (resultVersion.current === requestVersion) {
-        setSaveError(saveErrorMessage(500));
+        setSaveError(saveErrorMessage(500, t));
       }
     } finally {
       savePendingRef.current = false;
@@ -333,14 +335,14 @@ export function PromptGenerator() {
       <section className="work-panel prompt-generator-form-panel">
         <div className="panel-heading">
           <div>
-            <h2>Priprema prompta</h2>
-            <p>Izaberite predmet i vrstu pravnog zadatka</p>
+            <h2>{t("preparation")}</h2>
+            <p>{t("chooseMatterAndTask")}</p>
           </div>
         </div>
 
         <form className="prompt-generator-form" onSubmit={generatePrompt}>
           <label className="prompt-generator-field" htmlFor="prompt-matter">
-            <span>Predmet</span>
+            <span>{t("matter")}</span>
             <select
               id="prompt-matter"
               value={selectedMatter ? matterKey(selectedMatter) : ""}
@@ -350,8 +352,7 @@ export function PromptGenerator() {
             >
               <option value="">
                 {mattersLoading
-                  ? "Učitavanje predmeta…"
-                  : "Izaberite predmet"}
+                  ? t("loadingMatters") : t("chooseMatter")}
               </option>
               {matters.map((matter) => (
                 <option key={matterKey(matter)} value={matterKey(matter)}>
@@ -369,19 +370,19 @@ export function PromptGenerator() {
 
           {!mattersLoading && !mattersError && matters.length === 0 ? (
             <p className="prompt-generator-empty">
-              Nema aktivnih predmeta. Prvo kreirajte predmet u modulu Matters.
+              {t("noActiveMatters")}
             </p>
           ) : null}
 
           <label className="prompt-generator-field" htmlFor="prompt-type">
-            <span>Prompt tip</span>
+            <span>{t("promptType")}</span>
             <select
               id="prompt-type"
               value={promptType}
               onChange={(event) => changePromptType(event.target.value)}
               required
             >
-              <option value="">Izaberite prompt tip</option>
+              <option value="">{t("choosePromptType")}</option>
               {PROMPT_TYPES.map((type) => (
                 <option key={type.slug} value={type.slug}>
                   {type.label}
@@ -391,7 +392,7 @@ export function PromptGenerator() {
           </label>
 
           <label className="prompt-generator-field" htmlFor="prompt-context">
-            <span>Dodatni kontekst</span>
+            <span>{t("additionalContext")}</span>
             <textarea
               id="prompt-context"
               rows={9}
@@ -400,7 +401,7 @@ export function PromptGenerator() {
                 setAdditionalContext(event.target.value);
                 invalidateResult();
               }}
-              placeholder="Dodajte činjenice, cilj, ograničenja ili pitanja koja nisu evidentirana u predmetu."
+              placeholder={t("contextPlaceholder")}
             />
           </label>
 
@@ -414,7 +415,7 @@ export function PromptGenerator() {
               mattersLoading
             }
           >
-            {generatePending ? "Generisanje…" : "Generate Prompt"}
+            {generatePending ? t("generating") : t("generate")}
           </button>
 
           {generateError ? (
@@ -428,8 +429,7 @@ export function PromptGenerator() {
       <section className="work-panel prompt-preview-panel">
         <div className="panel-heading">
           <div>
-            <h2>Pregled prompta</h2>
-            <p>Word-ready tekst za ručni nastavak rada</p>
+            <h2>{t("preview")}</h2><p>{t("previewHelp")}</p>
           </div>
         </div>
 
@@ -437,25 +437,23 @@ export function PromptGenerator() {
           <div className="prompt-preview-result" aria-live="polite">
             <dl>
               <div>
-                <dt>Predmet</dt>
+                <dt>{t("matter")}</dt>
                 <dd>{result.matter.matterName}</dd>
               </div>
               <div>
-                <dt>Prompt tip</dt>
+                <dt>{t("promptType")}</dt>
                 <dd>{result.promptType.label}</dd>
               </div>
             </dl>
 
             <div className="prompt-preview-documents">
               <section className="prompt-preview-document">
-                <h3>ChatGPT prompt</h3>
-                <pre tabIndex={0} aria-label="Generisani Word-ready prompt">
+                <h3>{t("chatGptPrompt")}</h3><pre tabIndex={0} aria-label={t("generatedWordReadyPrompt")}>
                   {result.prompt}
                 </pre>
               </section>
               <section className="prompt-preview-document">
-                <h3>Claude Review prompt</h3>
-                <pre tabIndex={0} aria-label="Generisani Claude Review prompt">
+                <h3>{t("claudeReviewPrompt")}</h3><pre tabIndex={0} aria-label={t("generatedClaudePrompt")}>
                   {result.claudeReviewPrompt}
                 </pre>
               </section>
@@ -463,40 +461,40 @@ export function PromptGenerator() {
 
             <div className="prompt-action-groups">
               <section>
-                <h3>Rad sa promptom</h3>
+                <h3>{t("workWithPrompt")}</h3>
                 <div className="prompt-action-row">
                   <button type="button" onClick={() => void copyPrompt("chatgpt")}>
-                    Copy for ChatGPT
+                    {t("copyChatGpt")}
                   </button>
                   <button type="button" onClick={() => void copyPrompt("claude")}>
-                    Copy for Claude Review
+                    {t("copyClaude")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void savePrompt()}
                     disabled={savePending}
                   >
-                    {savePending ? "Čuvanje…" : "Save Prompt to 04 AI"}
+                    {savePending ? t("saving") : t("saveToAi")}
                   </button>
                 </div>
               </section>
 
               <section>
-                <h3>Otvori AI alat</h3>
+                <h3>{t("openAiTool")}</h3>
                 <div className="prompt-action-row">
                   <a
                     href="https://chatgpt.com"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Open ChatGPT
+                    {t("openAiTool")}: ChatGPT
                   </a>
                   <a
                     href="https://claude.ai"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Open Claude
+                    {t("openAiTool")}: Claude
                   </a>
                 </div>
               </section>
@@ -518,10 +516,9 @@ export function PromptGenerator() {
           </div>
         ) : (
           <div className="prompt-preview-empty">
-            <strong>Prompt još nije generisan.</strong>
+            <strong>{t("notGenerated")}</strong>
             <p>
-              Izaberite predmet i prompt tip, dodajte kontekst po potrebi i
-              pokrenite generisanje.
+              {t("notGeneratedHelp")}
             </p>
           </div>
         )}
