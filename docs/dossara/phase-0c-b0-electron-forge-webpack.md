@@ -2,7 +2,7 @@
 
 ## 1. Status i opseg dokaza
 
-**Formalni status:** `GO UZ USLOVE — ČEKA RUČNI WINDOWS RESTART`
+**Formalni status:** `GO — WP 0C-B0 ACCEPTED`
 
 WP 0C-B0 je izolovani tehnički spike kojim je dokazana minimalna Electron Forge + Webpack desktop šasija. Ovo nije početak B1 niti produkcijska implementacija DOSSARA funkcija. Testovi nijesu pristupali stvarnom SDJ/OneDrive workspace-u ni dozvoljenom testnom workspace-u.
 
@@ -12,13 +12,7 @@ Audited branch i početni HEAD ovog spike-a:
 - baseline HEAD: `b5a24c1a9bef15bc1c7d536ba48e8befea8b619a`;
 - datum završnog acceptance prolaza: 2026-08-02.
 
-Preostali uslovi su:
-
-1. ručni Windows reboot acceptance;
-2. automatizovani test sa posebno neprijateljskim Electron `WebContents` prije internog release-a;
-3. remediation aktuelnih development/build i postojećih Next dependency audit nalaza prije internog release-a.
-
-Windows reboot nije izvršen. Poseban neprijateljski Electron `WebContents` nije kreiran niti testiran.
+Automatizovani i pakovani acceptance testovi su prethodno prošli, a ručni Windows restart test je 5. avgusta 2026. takođe prošao. Electron Forge + Webpack desktop foundation je prihvaćen kao tehnički pravac. B0 potvrđuje samo desktop šasiju, ne poslovne ili filesystem funkcije. Preostale obaveze iz odjeljka 16 ne poništavaju B0 i ne odobravaju B1.
 
 ## 2. Dokazana arhitektura
 
@@ -47,6 +41,29 @@ Build i packaging model:
 - packaged renderer se učitava iz `app.asar` preko kanonskog `file:` URL-a;
 - ne postoji pakovani Next/Node server, lokalni HTTP server ni workspace filesystem integracija;
 - IPC API je fiksan i ne prihvata proizvoljan channel ili renderer-supplied URL.
+
+Prihvaćeni desktop foundation je:
+
+- Electron Forge;
+- Webpack;
+- React;
+- TypeScript;
+- sandboxed renderer;
+- minimalni preload/`contextBridge`;
+- strictly typed IPC;
+- Electron main privileged boundary.
+
+B0 acceptance je dokazao da pakovana aplikacija radi:
+
+- bez Next runtime-a;
+- bez aplikacijskog HTTP servera;
+- bez loopback porta;
+- bez child server procesa;
+- bez poslovnog filesystem i workspace pristupa;
+- bez direktnog Node pristupa iz renderera;
+- bez outbound runtime konekcija u izvršenom nadzoru.
+
+Ova odluka ne zaključava oblik B1–B7 niti konačnu Verified verziju proizvoda.
 
 ## 3. Stvarne dependency verzije
 
@@ -295,24 +312,51 @@ Klasifikacija:
 
 Audit nije pronašao dokaz da navedeni build/web lanci ulaze u B0 pakovani runtime. Zbog toga nijesu klasifikovani kao B0 blocker, ali se ne smiju ignorisati prije internog release-a. `npm audit fix`, `npm audit fix --force`, overrides i ručne dependency promjene nijesu korišćeni. Auditov predlog uključuje potencijalno breaking ili nelogične downgrade putanje i ne smije se automatski primijeniti.
 
-## 15. Ručni Windows restart acceptance
+## 15. Manual Windows Restart Acceptance
 
-Ova provjera nije izvršena. Korisnik treba da uradi:
+- **Datum:** 5. avgust 2026.
+- **Izvršilac testa:** naručilac / krajnji korisnik.
+- **Testirana aplikacija:** pakovani B0 executable iz Forge `out` foldera.
+- **Način izvršenja:** test nije izvršen kroz razvojni server, terminal ili Codex automatizaciju.
 
-1. potpuno zatvoriti sve B0 procese;
-2. restartovati Windows;
-3. otvoriti posljednji pakovani B0 folder;
-4. dvokliknuti executable;
-5. potvrditi da se prikazuje jedan prozor;
-6. potvrditi `IPC status: ready`;
-7. potvrditi svih šest AppInfo vrijednosti;
-8. ponovo dvokliknuti executable i potvrditi da se ne otvara drugi prozor;
-9. zatvoriti aplikaciju;
-10. u Task Manageru potvrditi da nema zaostalog procesa.
+| Provjera | Rezultat |
+|---|---|
+| Potpuni Windows restart | PASS |
+| Prvi start pakovane aplikacije poslije restarta | PASS |
+| Prikazan jedan glavni prozor | PASS |
+| IPC status: ready | PASS |
+| Prikaz svih šest AppInfo vrijednosti | PASS |
+| Ponovni dvoklik executable-a | PASS |
+| Druga nezavisna aplikacijska instanca nije otvorena | PASS |
+| Single-instance fokus/zadržavanje jednog prozora | PASS |
+| Normalno zatvaranje aplikacije | PASS |
+| Cijela grupa `sdj-mike-v1` procesa nestala iz Task Managera | PASS |
+| Zaostali aplikacijski proces poslije zatvaranja | NEMA |
 
-Do korisničke potvrde status ostaje `GO UZ USLOVE — ČEKA RUČNI WINDOWS RESTART`.
+Potvrđene AppInfo vrijednosti:
 
-## 16. Rollback
+- Application;
+- Application version;
+- Electron version;
+- Node.js version;
+- Chromium version;
+- Platform.
+
+**SmartScreen / Defender rezultat: NIJE POSEBNO EVIDENTIRAN U RUČNOM ACCEPTANCE TESTU.** Ova stavka nije klasifikovana kao PASS ili FAIL i ne blokira B0 arhitektonski acceptance.
+
+## 16. Preostale obaveze koje ne blokiraju B0
+
+Sljedeće stavke ostaju budući gate-ovi prije interne release verzije ili prije uvođenja native funkcionalnosti:
+
+1. automatizovani hostile-`WebContents` security test;
+2. remediation ili nadogradnja ranjivih development/build dependencies;
+3. ponovni pregled `rebuildConfig.onlyModules` prije prvog native modula;
+4. odluka o odvajanju desktop dependency manifesta od postojećeg Next stabla;
+5. code signing i installer kada budu stvarno potrebni.
+
+Ove obaveze ne poništavaju B0, ne odobravaju B1 i ne predstavljaju odobrenje za poslovne, filesystem ili native funkcionalnosti.
+
+## 17. Rollback
 
 Ako B0 treba povući:
 
@@ -325,8 +369,10 @@ Ako B0 treba povući:
 
 Rollback B0 commita ne smije obuhvatiti druge Phase 0 ili V1 commitove.
 
-## 17. Zaključak
+## 18. Zaključak
 
-Electron Forge + Webpack B0 šasija je tehnički dokazana za development, packaging, IPC, exact sender validation, single-instance, lifecycle, portable execution i odsustvo packaged server/network/build-tool sadržaja. Status nije bezuslovni GO zbog neizvršenog Windows reboot acceptance-a, neizvršenog hostile-`WebContents` testa i neriješenih dependency audit nalaza.
+Electron Forge + Webpack B0 šasija je prihvaćena kao tehnički pravac nakon uspješnih automatizovanih, pakovanih i ručnih Windows restart acceptance testova. Dokaz obuhvata development, packaging, IPC, exact sender validation, single-instance, lifecycle, portable execution i odsustvo packaged server/network/build-tool sadržaja. B0 potvrđuje samo desktop foundation, ne poslovne ili filesystem funkcije.
 
-**Konačni status ovog dokumenta:** `GO UZ USLOVE — ČEKA RUČNI WINDOWS RESTART`.
+**Konačni status ovog dokumenta:** `GO — WP 0C-B0 ACCEPTED`.
+
+Preostale obaveze iz odjeljka 16 ne poništavaju B0, ali ostaju future gates prije interne release ili native funkcionalnosti. B0 ne odobrava B1, ne definiše konačni oblik B1–B7 i ne zaključava konačnu Verified verziju proizvoda.
