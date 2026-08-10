@@ -2,7 +2,10 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
-import { resolveSafeClientForMutation } from "@/lib/sdj-matters";
+import {
+  parseMatterCommandCenter,
+  resolveSafeClientForMutation,
+} from "@/lib/sdj-matters";
 import { getClientsRoot } from "@/lib/sdj-workspace";
 import { createMatterTransaction } from "./matter-create";
 import {
@@ -64,20 +67,35 @@ export async function GET() {
               .map(async (entry) => {
                 const matterPath = path.win32.join(clientPath, entry.name);
                 let matterName = entry.name;
+                let clientName = clientEntry.name;
+                let legalArea = "";
+                let status = "";
+                let nextStep = "";
+                let deadline = "";
                 try {
                   const commandCenter = await readFile(
                     path.win32.join(matterPath, "00 CONTROL", "command-center.md"),
                     "utf8",
                   );
-                  const match = /^Predmet:\s*(.*)$/m.exec(commandCenter);
-                  if (match?.[1]?.trim()) matterName = match[1].trim();
+                  const { metadata } = parseMatterCommandCenter(commandCenter);
+                  if (metadata.matter) matterName = metadata.matter;
+                  if (metadata.client) clientName = metadata.client;
+                  legalArea = metadata.legalArea ?? "";
+                  status = metadata.status ?? "";
+                  nextStep = metadata.nextStep ?? "";
+                  deadline = metadata.deadline ?? "";
                 } catch {
                   // Naziv foldera je fallback kada kontrolni fajl nije čitljiv.
                 }
                 return {
                   clientFolder: clientEntry.name,
+                  clientName,
                   matterFolder: entry.name,
                   matterName,
+                  legalArea,
+                  status,
+                  nextStep,
+                  deadline,
                 };
               }),
           );

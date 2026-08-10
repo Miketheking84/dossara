@@ -6,7 +6,8 @@
     "prompts": "Promptovi",
     "settings": "Podešavanja",
     "localOnly": "Samo lokalno",
-    "mainNavigation": "Glavna navigacija"
+    "mainNavigation": "Glavna navigacija",
+    "tagline": "Pravni komandni centar"
   },
   "Settings": {
     "sectionLabel": "Konfiguracija",
@@ -81,8 +82,8 @@
   },
   "Matters": {
     "sectionLabel": "Predmeti i klijenti",
-    "title": "Predmeti",
-    "description": "Kreirajte lokalne klijente i strukturu novog predmeta."
+    "title": "Klijenti i predmeti",
+    "description": "Izaberite klijenta, pregledajte njegove predmete ili otvorite novi predmet."
   },
   "MattersWorkspace": {
     "clients": "Klijenti",
@@ -116,7 +117,15 @@
     "waitingDetail": "Detalj čekanja / napomena",
     "waitingDetailPlaceholder": "npr. dostava ugovora, email komunikacije, izjašnjenje druge strane…",
     "creatingMatter": "Kreiram predmet…",
-    "createMatter": "Kreiraj predmet"
+    "createMatter": "Kreiraj predmet",
+    "matterCreatedSuccess": "Predmet je uspješno kreiran",
+    "matterCreatedErrors": "Predmet je kreiran sa greškama",
+    "openMatterFolder": "Otvori folder predmeta",
+    "openMatterCockpit": "Otvori kokpit predmeta",
+    "createdFolders": "Kreirani folderi",
+    "createdControlFiles": "Kreirani kontrolni fajlovi",
+    "errors": "Greške",
+    "none": "Nema"
   },
   "PromptGenerator": {
     "sectionLabel": "AI rad",
@@ -126,6 +135,50 @@
     "preparation": "Priprema prompta", "chooseMatterAndTask": "Izaberite predmet i vrstu pravnog zadatka", "matter": "Predmet", "loadingMatters": "Učitavanje predmeta…", "chooseMatter": "Izaberite predmet", "noActiveMatters": "Nema aktivnih predmeta. Prvo kreirajte predmet u modulu Predmeti.", "promptType": "Tip prompta", "choosePromptType": "Izaberite tip prompta", "additionalContext": "Dodatni kontekst", "contextPlaceholder": "Dodajte činjenice, cilj, ograničenja ili pitanja koja nijesu evidentirana u predmetu.", "generating": "Generisanje…", "generate": "Generiši prompt", "preview": "Pregled prompta", "previewHelp": "Word-ready tekst za ručni nastavak rada", "chatGptPrompt": "ChatGPT prompt", "claudeReviewPrompt": "Claude Review prompt", "generatedWordReadyPrompt": "Generisani Word-ready prompt", "generatedClaudePrompt": "Generisani Claude Review prompt", "workWithPrompt": "Rad sa promptom", "copyChatGpt": "Kopiraj za ChatGPT", "copyClaude": "Kopiraj za Claude Review", "saving": "Čuvanje…", "saveToAi": "Sačuvaj prompt u 04 AI", "openAiTool": "Otvori AI alat", "notGenerated": "Prompt još nije generisan.", "notGeneratedHelp": "Izaberite predmet i tip prompta, dodajte kontekst po potrebi i pokrenite generisanje.", "mattersUnavailable": "Predmeti trenutno nijesu dostupni. Pokušajte ponovo kasnije.", "generateFailed": "Prompt trenutno nije moguće generisati. Provjerite izbor i pokušajte ponovo.", "copiedChatGpt": "Prompt za ChatGPT je kopiran.", "copiedClaude": "Claude Review prompt je kopiran.", "copyFailed": "Prompt nije moguće kopirati. Označite tekst i kopirajte ga ručno.", "saveInvalid": "Podaci za čuvanje prompta nijesu validni. Generišite prompt ponovo.", "saveMissing": "Predmet ili potrebni lokalni fajlovi nijesu dostupni.", "saveConflict": "Prompt trenutno nije moguće sačuvati zbog konflikta imena. Pokušajte ponovo.", "saveFailed": "Prompt trenutno nije moguće sačuvati. Pokušajte ponovo.", "saved": "Sačuvano: {path}"
   },
   "MatterCockpit": {
-    "back": "Nazad na Predmete", "title": "Kokpit predmeta", "client": "Klijent", "matter": "Predmet", "openedAt": "Datum otvaranja", "legalArea": "Oblast prava", "status": "Status", "priority": "Prioritet", "nextStep": "Sledeći korak", "waitingFor": "Čeka se od", "waitingDetail": "Detalj čekanja / napomena", "deadline": "Rok", "shortDescription": "Kratak opis", "keyQuestions": "Ključna pitanja", "risks": "Rizici", "expectedOutput": "Očekivani output", "outputStatus": "Status outputa", "finalDocument": "Finalni dokument", "finalGoal": "Finalni cilj", "notProvided": "Nije navedeno", "aiActions": "AI akcije predmeta", "generatePrompt": "Generiši prompt", "matterData": "Podaci predmeta", "controlMissing": "command-center.md nije pronađen za ovaj predmet.", "controlUnreadable": "command-center.md postoji, ali trenutno nije moguće pročitati njegov sadržaj.", "matterFolder": "Matter folder", "overview": "Pregled", "overviewHelp": "Najvažniji podaci aktivnog predmeta", "warning": "Neki podaci u command-center.md nijesu mogli biti potpuno protumačeni.", "basic": "Osnovni podaci", "flow": "Tok predmeta", "legal": "Pravna analiza", "expected": "Očekivani rezultat", "finalization": "Finalizacija"
+    "back": "Nazad na Predmete", "title": "Kokpit predmeta", "client": "Klijent", "matter": "Predmet", "openedAt": "Datum otvaranja", "legalArea": "Oblast prava", "status": "Status", "priority": "Prioritet", "nextStep": "Sledeći korak", "waitingFor": "Čeka se od", "waitingDetail": "Detalj čekanja / napomena", "deadline": "Rok", "shortDescription": "Kratak opis", "keyQuestions": "Ključna pitanja", "risks": "Rizici", "expectedOutput": "Očekivani rezultat", "outputStatus": "Status rezultata", "finalDocument": "Finalni dokument", "finalGoal": "Finalni cilj", "notProvided": "Nije navedeno", "aiActions": "AI akcije predmeta", "generatePrompt": "Generiši prompt", "matterData": "Podaci predmeta", "controlMissing": "Kontrolni podaci nijesu pronađeni za ovaj predmet.", "controlUnreadable": "Kontrolni podaci postoje, ali ih trenutno nije moguće pročitati.", "matterFolder": "Folder predmeta", "overview": "Pregled", "overviewHelp": "Najvažniji podaci aktivnog predmeta", "warning": "Neki kontrolni podaci nijesu mogli biti potpuno protumačeni.", "basic": "Osnovni podaci", "flow": "Tok predmeta", "legal": "Pravna analiza", "expected": "Očekivani rezultat", "finalization": "Finalizacija", "workTitle": "Rad na predmetu", "workDescription": "Status, rok i naredne aktivnosti", "workEmpty": "Status, rok i sledeći korak još nijesu uneseni.", "legalDescription": "Sažetak, ključna pitanja i rizici", "outcomeTitle": "Rezultat i finalizacija", "outcomeDescription": "Očekivani rezultat i završni dokumenti", "editWork": "Uredi", "saveWork": "Sačuvaj", "cancelEdit": "Otkaži", "savingWork": "Čuvanje…", "workSaved": "Operativni podaci su sačuvani.", "workSaveFailed": "Operativni podaci nijesu sačuvani.", "notSet": "Nije uneseno"
+  },
+  "MatterFolderActions": {
+    "title": "Brze akcije",
+    "description": "Otvorite odabrani folder aktivnog predmeta",
+    "openMatterFolder": "Otvori folder predmeta",
+    "openInput": "Otvori 01 ULAZ",
+    "openWorking": "Otvori 02 RADNO",
+    "openFinal": "Otvori 03 FINALNO",
+    "openAi": "Otvori 04 AI",
+    "opening": "Otvaranje…",
+    "folderOpened": "Folder je otvoren.",
+    "folderOpenError": "Folder trenutno nije moguće otvoriti."
+  },
+  "MatterFiles": {
+    "title": "Dokumentacija predmeta",
+    "description": "Folderi, podfolderi i dokumenti unutar ovog predmeta",
+    "countsLabel": "Broj dokumenata",
+    "folderCount": "{count, plural, one {# folder} few {# foldera} other {# foldera}}",
+    "fileCount": "{count, plural, one {# fajl} few {# fajla} other {# fajlova}}",
+    "refresh": "Osvježi",
+    "refreshing": "Osvježavanje…",
+    "showControlFiles": "Prikaži kontrolne fajlove",
+    "hideControlFiles": "Sakrij kontrolne fajlove",
+    "openMatterInWindows": "Otvori predmet u Windows folderu",
+    "openingMatter": "Otvaranje Windows foldera…",
+    "matterOpenedInWindows": "Predmet je otvoren u Windows folderu.",
+    "openMatterFailed": "Windows folder predmeta nije moguće otvoriti.",
+    "loadFailed": "Spisak dokumentacije nije moguće učitati.",
+    "treeLabel": "Folderi i dokumenti predmeta",
+    "previewLabel": "Pregled dokumenta",
+    "empty": "U ovom predmetu nema dokumenata.",
+    "selectFile": "Izaberite dokument",
+    "selectFileHelp": "Kliknite fajl lijevo da ga pregledate ovdje.",
+    "previewTitle": "Pregled dokumenta {name}",
+    "previewLoading": "Učitavanje pregleda…",
+    "previewLoadFailed": "Pregled dokumenta nije moguće učitati.",
+    "previewUnavailable": "Pregled nije dostupan za ovaj tip fajla.",
+    "previewUnavailableHelp": "Kliknite Otvori lokalno da ga pogledate u Windows aplikaciji.",
+    "openLocally": "Otvori lokalno",
+    "opening": "Otvaranje…",
+    "openedLocally": "Dokument je otvoren lokalno.",
+    "openFailed": "Dokument nije moguće otvoriti.",
+    "truncated": "Spisak je veoma veliki, pa je prikazan samo prvi dio.",
+    "unsafeSkipped": "{count, plural, one {Preskočena je # nebezbjedna stavka} few {Preskočene su # nebezbjedne stavke} other {Preskočeno je # nebezbjednih stavki}}"
   }
 }

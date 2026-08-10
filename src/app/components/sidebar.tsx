@@ -33,7 +33,7 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="brand">
         <div className="brand-mark">{BRAND.shortMark}</div>
-        <div><strong>{BRAND.editionName}</strong><span>{BRAND.tagline}</span></div>
+        <div><strong>{BRAND.editionName}</strong><span>{t("tagline")}</span></div>
       </div>
       <nav aria-label={t("mainNavigation")}>
         {items.map((item) => {

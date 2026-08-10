@@ -6,7 +6,8 @@
     "prompts": "Prompts",
     "settings": "Settings",
     "localOnly": "Local only",
-    "mainNavigation": "Main navigation"
+    "mainNavigation": "Main navigation",
+    "tagline": "Legal Command Center"
   },
   "Settings": {
     "sectionLabel": "Configuration",
@@ -81,8 +82,8 @@
   },
   "Matters": {
     "sectionLabel": "Matters and clients",
-    "title": "Matters",
-    "description": "Create local clients and a new matter structure."
+    "title": "Clients and matters",
+    "description": "Select a client, review their matters, or open a new matter."
   },
   "MattersWorkspace": {
     "clients": "Clients",
@@ -116,7 +117,15 @@
     "waitingDetail": "Waiting detail / note",
     "waitingDetailPlaceholder": "e.g. delivery of the contract, email correspondence, or the other party's response…",
     "creatingMatter": "Creating matter…",
-    "createMatter": "Create matter"
+    "createMatter": "Create matter",
+    "matterCreatedSuccess": "Matter created successfully",
+    "matterCreatedErrors": "Matter created with errors",
+    "openMatterFolder": "Open matter folder",
+    "openMatterCockpit": "Open matter cockpit",
+    "createdFolders": "Created folders",
+    "createdControlFiles": "Created control files",
+    "errors": "Errors",
+    "none": "None"
   },
   "PromptGenerator": {
     "sectionLabel": "AI work",
@@ -126,6 +135,50 @@
     "preparation": "Prompt preparation", "chooseMatterAndTask": "Choose a matter and legal task type", "matter": "Matter", "loadingMatters": "Loading matters…", "chooseMatter": "Choose a matter", "noActiveMatters": "There are no active matters. Create a matter in the Matters module first.", "promptType": "Prompt type", "choosePromptType": "Choose a prompt type", "additionalContext": "Additional context", "contextPlaceholder": "Add facts, objectives, constraints, or questions not recorded in the matter.", "generating": "Generating…", "generate": "Generate prompt", "preview": "Prompt preview", "previewHelp": "Word-ready text for manual continuation of work", "chatGptPrompt": "ChatGPT prompt", "claudeReviewPrompt": "Claude Review prompt", "generatedWordReadyPrompt": "Generated Word-ready prompt", "generatedClaudePrompt": "Generated Claude Review prompt", "workWithPrompt": "Work with prompt", "copyChatGpt": "Copy for ChatGPT", "copyClaude": "Copy for Claude Review", "saving": "Saving…", "saveToAi": "Save prompt to 04 AI", "openAiTool": "Open AI tool", "notGenerated": "The prompt has not been generated yet.", "notGeneratedHelp": "Choose a matter and prompt type, add context if needed, and start generation.", "mattersUnavailable": "Matters are currently unavailable. Please try again later.", "generateFailed": "The prompt cannot be generated right now. Check the selection and try again.", "copiedChatGpt": "The ChatGPT prompt was copied.", "copiedClaude": "The Claude Review prompt was copied.", "copyFailed": "The prompt could not be copied. Select the text and copy it manually.", "saveInvalid": "The prompt data is invalid. Generate the prompt again.", "saveMissing": "The matter or required local files are unavailable.", "saveConflict": "The prompt cannot be saved because of a name conflict. Try again.", "saveFailed": "The prompt cannot be saved right now. Try again.", "saved": "Saved: {path}"
   },
   "MatterCockpit": {
-    "back": "Back to Matters", "title": "Matter cockpit", "client": "Client", "matter": "Matter", "openedAt": "Opening date", "legalArea": "Legal area", "status": "Status", "priority": "Priority", "nextStep": "Next step", "waitingFor": "Waiting for", "waitingDetail": "Waiting detail / note", "deadline": "Deadline", "shortDescription": "Short description", "keyQuestions": "Key questions", "risks": "Risks", "expectedOutput": "Expected output", "outputStatus": "Output status", "finalDocument": "Final document", "finalGoal": "Final goal", "notProvided": "Not provided", "aiActions": "Matter AI actions", "generatePrompt": "Generate prompt", "matterData": "Matter data", "controlMissing": "command-center.md was not found for this matter.", "controlUnreadable": "command-center.md exists, but its content cannot currently be read.", "matterFolder": "Matter folder", "overview": "Overview", "overviewHelp": "The most important data for the active matter", "warning": "Some data in command-center.md could not be fully interpreted.", "basic": "Basic data", "flow": "Matter flow", "legal": "Legal analysis", "expected": "Expected result", "finalization": "Finalization"
+    "back": "Back to Matters", "title": "Matter cockpit", "client": "Client", "matter": "Matter", "openedAt": "Opening date", "legalArea": "Legal area", "status": "Status", "priority": "Priority", "nextStep": "Next step", "waitingFor": "Waiting for", "waitingDetail": "Waiting detail / note", "deadline": "Deadline", "shortDescription": "Short description", "keyQuestions": "Key questions", "risks": "Risks", "expectedOutput": "Expected result", "outputStatus": "Result status", "finalDocument": "Final document", "finalGoal": "Final goal", "notProvided": "Not provided", "aiActions": "Matter AI actions", "generatePrompt": "Generate prompt", "matterData": "Matter data", "controlMissing": "Control data was not found for this matter.", "controlUnreadable": "Control data exists but cannot currently be read.", "matterFolder": "Matter folder", "overview": "Overview", "overviewHelp": "The most important data for the active matter", "warning": "Some control data could not be fully interpreted.", "basic": "Basic data", "flow": "Matter flow", "legal": "Legal analysis", "expected": "Expected result", "finalization": "Finalization", "workTitle": "Matter work", "workDescription": "Status, deadline and next activities", "workEmpty": "Status, deadline and next step have not been entered yet.", "legalDescription": "Summary, key questions and risks", "outcomeTitle": "Result and finalization", "outcomeDescription": "Expected result and final documents", "editWork": "Edit", "saveWork": "Save", "cancelEdit": "Cancel", "savingWork": "Saving…", "workSaved": "Matter work details were saved.", "workSaveFailed": "Matter work details were not saved.", "notSet": "Not entered"
+  },
+  "MatterFolderActions": {
+    "title": "Quick actions",
+    "description": "Open a folder from the active matter",
+    "openMatterFolder": "Open matter folder",
+    "openInput": "Open 01 ULAZ",
+    "openWorking": "Open 02 RADNO",
+    "openFinal": "Open 03 FINALNO",
+    "openAi": "Open 04 AI",
+    "opening": "Opening…",
+    "folderOpened": "The folder was opened.",
+    "folderOpenError": "The folder could not be opened."
+  },
+  "MatterFiles": {
+    "title": "Matter documents",
+    "description": "Folders, subfolders and documents inside this matter",
+    "countsLabel": "Document counts",
+    "folderCount": "{count, plural, one {# folder} other {# folders}}",
+    "fileCount": "{count, plural, one {# file} other {# files}}",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "showControlFiles": "Show control files",
+    "hideControlFiles": "Hide control files",
+    "openMatterInWindows": "Open matter in Windows folder",
+    "openingMatter": "Opening Windows folder…",
+    "matterOpenedInWindows": "The matter was opened in its Windows folder.",
+    "openMatterFailed": "The matter Windows folder could not be opened.",
+    "loadFailed": "The document list could not be loaded.",
+    "treeLabel": "Matter folders and documents",
+    "previewLabel": "Document preview",
+    "empty": "There are no documents in this matter.",
+    "selectFile": "Select a document",
+    "selectFileHelp": "Click a file on the left to preview it here.",
+    "previewTitle": "Preview of {name}",
+    "previewLoading": "Loading preview…",
+    "previewLoadFailed": "The document preview could not be loaded.",
+    "previewUnavailable": "Preview is not available for this file type.",
+    "previewUnavailableHelp": "Use Open locally to view it in the default Windows application.",
+    "openLocally": "Open locally",
+    "opening": "Opening…",
+    "openedLocally": "The document was opened locally.",
+    "openFailed": "The document could not be opened.",
+    "truncated": "The list is very large, so only the first part is shown.",
+    "unsafeSkipped": "{count, plural, one {# unsafe item was skipped} other {# unsafe items were skipped}}"
   }
 }

@@ -11,11 +11,11 @@ export function LocaleSelector() {
   const currentLocale = useLocale() as AppLocale;
   const [locale, setLocale] = useState<AppLocale>(currentLocale);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
+  const [messageKey, setMessageKey] = useState<"languageSaved" | "languageSaveFailed" | null>(null);
 
   async function saveLocale() {
     setPending(true);
-    setMessage("");
+    setMessageKey(null);
     try {
       const response = await fetch("/api/settings/locale", {
         method: "POST",
@@ -23,10 +23,10 @@ export function LocaleSelector() {
         body: JSON.stringify({ locale }),
       });
       if (!response.ok) throw new Error();
-      setMessage(t("languageSaved"));
+      setMessageKey("languageSaved");
       router.refresh();
     } catch {
-      setMessage(t("languageSaveFailed"));
+      setMessageKey("languageSaveFailed");
     } finally {
       setPending(false);
     }
@@ -41,7 +41,7 @@ export function LocaleSelector() {
         {SUPPORTED_LOCALES.map((option) => <option key={option} value={option}>{option === "sr-Latn" ? t("serbianLatin") : t("english")}</option>)}
       </select>
       <button type="button" onClick={() => void saveLocale()} disabled={pending}>{pending ? t("savingLanguage") : t("saveLanguage")}</button>
-      {message ? <p role="status">{message}</p> : null}
+      {messageKey ? <p role="status">{t(messageKey)}</p> : null}
     </section>
   );
 }

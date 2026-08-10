@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type FolderTarget = "matter" | "ulaz" | "radno" | "finalno" | "ai";
 
@@ -12,7 +13,7 @@ const ACTIONS: readonly { target: FolderTarget; label: string }[] = [
   { target: "ai", label: "Otvori 04 AI" },
 ];
 
-export function MatterFolderActions({
+export function LegacyMatterFolderActions({
   clientFolder,
   matterFolder,
 }: {
@@ -96,6 +97,53 @@ export function MatterFolderActions({
           {message.text}
         </p>
       ) : null}
+    </section>
+  );
+}
+
+const LOCALIZED_ACTIONS = [
+  ["matter", "openMatterFolder"],
+  ["ulaz", "openInput"],
+  ["radno", "openWorking"],
+  ["finalno", "openFinal"],
+  ["ai", "openAi"],
+] as const;
+
+export function MatterFolderActions({ clientFolder, matterFolder }: { clientFolder: string; matterFolder: string }) {
+  const t = useTranslations("MatterFolderActions");
+  const [pendingTarget, setPendingTarget] = useState<FolderTarget | null>(null);
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  async function openFolder(target: FolderTarget) {
+    setPendingTarget(target);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/matters/open-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientFolder, matterFolder, target }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || t("folderOpenError"));
+      setMessage({ kind: "success", text: t("folderOpened") });
+    } catch (error) {
+      setMessage({ kind: "error", text: error instanceof Error ? error.message : t("folderOpenError") });
+    } finally {
+      setPendingTarget(null);
+    }
+  }
+
+  return (
+    <section className="work-panel matter-folder-actions">
+      <div className="panel-heading"><div><h2>{t("title")}</h2><p>{t("description")}</p></div></div>
+      <div className="active-matter-actions matter-folder-action-buttons" aria-busy={pendingTarget !== null}>
+        {LOCALIZED_ACTIONS.map(([target, key]) => (
+          <button key={target} type="button" disabled={pendingTarget !== null} onClick={() => openFolder(target)}>
+            {pendingTarget === target ? t("opening") : t(key)}
+          </button>
+        ))}
+      </div>
+      {message ? <p className={message.kind === "success" ? "active-matters-message" : "error-message"} role="status">{message.text}</p> : null}
     </section>
   );
 }
