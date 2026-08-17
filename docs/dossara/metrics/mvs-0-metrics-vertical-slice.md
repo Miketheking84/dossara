@@ -1,16 +1,20 @@
 # DOSSARA — MVS-0 Metrics Vertical Slice
 
+> **Historical status notice (GOV-REC-1).** Ovaj dokument čuva MVS-0 stanje, identifikovane authority gap-ove, kasniji isolated/provisional evidence status i acceptance ishod iz vremena tog work package-a; njegovi tehnički nalazi, test rezultati, rationale i tadašnji status nijesu retroaktivno promijenjeni. Za sadašnju operational-semantics interpretaciju važi successor authority chain: VOC-1 je zatvorio pet ugovora (`09b74f514fcb56fbf20d74019ef2542aeb675b12`), a MVS-1 je prihvaćeni executable proof tih semantics (`b590e1738e88711f2d3aff5a0969190fe76e4cff`). Ovaj dokument ostaje historical design/acceptance artefakt i nije current authority tamo gdje ga VOC-1/MVS-1 preciziraju ili zamjenjuju.
+
 ## 1. Document control
 
 | Polje | Vrijednost |
 |---|---|
 | Work package | MVS-0 — Metrics Vertical Slice Design |
-| Status | Corrective documentation draft — executable scope blocked |
+| Status | Isolated executable vertical slice accepted with FIELD-0 provisional contracts |
 | Datum | 10. avgust 2026. |
 | Branch | `spike/phase-0c-electron-forge-webpack` |
 | Formalni kontrolni akt | `docs/dossara/decision-alignment-register-v1.2.md` |
 | Normativni baseline | Accepted VLA-0A–E, VLA-1A/1B i FH-1 acceptance commit `c9c8eb4` |
-| Vrsta rada | Design contract; bez metrics implementacije, UI-ja ili production coupling-a |
+| VOC-0 contract | `docs/dossara/metrics/voc-0-domain-semantic-contracts.md` |
+| Executable evidence | `spikes/mvs-0-metrics/` — targeted suite 13/13 PASS |
+| Vrsta rada | Design contract + isolated executable spike; bez UI-ja ili production coupling-a |
 
 ## 2. Purpose and boundary
 
@@ -30,7 +34,7 @@ Layer 1 canonical revisions + Layer 2 semantic/audit history
 
 MVS-0 ne obuhvata:
 
-- metrics executable, fixture ili test kod;
+- production metrics implementaciju izvan `spikes/mvs-0-metrics/`;
 - izmjene `src/` ili FH-1 spike-a;
 - SQLite, FTS, novi metrics database ili trend/time-series storage;
 - cloud bazu, Supabase, RAG, OpenAI/Claude API ili drugi AI provider;
@@ -48,65 +52,52 @@ Trust status ostaje odvojen od lifecycle, operational, priority, quality i produ
 |---|---|
 | authoritative input | VLA-1A/1B Layers 1–2: canonical exact revisions, currentness/lifecycle relations i immutable semantic/audit history |
 | action item | postojeći canonical object type `LEGAL_ACTION`; izraz ne uvodi `ACTION_ITEM` object type |
-| active matter | rezultat budućeg accepted matter-operational classifier-a; nije VLA-0A revision lifecycle `ACTIVE` po automatizmu |
-| open/actionable action | rezultat budućeg accepted `LEGAL_ACTION` operational classifier-a; nije izveden samo iz lifecycle `ACTIVE` |
+| active matter | VOC-0 lifecycle portfolio classification; nije VLA-0A revision lifecycle `ACTIVE` po automatizmu |
+| open/completed/actionable action | tri odvojena VOC-0 resolvera nad authoritative `LEGAL_ACTION` istorijom |
 | authoritative due instant | rezultat accepted action/deadline mapping-a; radni naziv `dueAt` u metric formuli nije novo canonical polje |
 | current operational state | authoritative matter operational state/effect koji VLA resolver proglasi current za `evaluatedAt`; Matter State projection nije authority |
 | effective time | VLA-0E `effective_at` ili uključivi `effective_from`, prema object-specific temporal contract-u |
 | supersession | immutable lifecycle/currentness events i typed relations; nikad filename, lexical ID ili `mtime` |
 | projection basis | VLA-1B `dependencyFrontier` plus exact typed authoritative references |
 
-Repo trenutno ne zaključava matter active/closed vocabulary, konačni `LEGAL_ACTION` operational vocabulary, authoritative due mapping niti canonical matter operational-state contract. MVS-0 zato zaključava samo classification granice i fail-closed ponašanje; ne izmišlja enum-e ili payload field name-ove.
+VLA/FH baseline ne zaključava ove domain semantike samostalno. VOC-0 ih sada daje kao executable contract za isolated MVS slice, uz FIELD-0 provisional granicu. VOC-0 contract ne pretvara VLA revision lifecycle u matter business lifecycle i ne propisuje canonical payload field name-ove.
 
 ### 4.1 `countsAsActiveMatterAsOf(matter, T)` decision lock
 
-`countsAsActiveMatterAsOf` je metrics classification nad već razriješenim authoritative lifecycle/currentness stanjem. Nije canonical state, novi lifecycle enum niti zapis koji se smije persisted u Layers 1–2.
+`countsAsActiveMatterAsOf` je metrics classification nad razriješenim authoritative **matter business lifecycle** stanjem. Nije canonical state, novi lifecycle enum niti zapis koji se smije persistirati u Layers 1–2. VLA-0A revision lifecycle `ACTIVE/SUPERSEDED/WITHDRAWN/VOIDED` ne mapira se na ovu tabelu.
 
-Accepted VLA-0A lifecycle termini opisuju revision/object record lifecycle, ne poslovnu otvorenost predmeta:
+| Matter business lifecycle as of `T` | Metrics classification |
+|---|---|
+| `OPEN`, `ACTIVE` | `TRUE` |
+| `SUSPENDED`, `ON_HOLD` | `TRUE` — provisional |
+| `CLOSED`, `CANCELLED` | `FALSE` |
+| `ARCHIVED` | `FALSE` — provisional ako je lifecycle status |
+| missing effective time ili unresolved conflict | `UNRESOLVED` -> §7 `UNAVAILABLE`/`INVALID` |
 
-| Accepted lifecycle state | Metrics classification za matter | Razlog |
-|---|---|---|
-| `ACTIVE` | `cannot-classify` -> `UNAVAILABLE` | znači aktuelna verzija objekta; ne znači da je matter poslovno active/open |
-| `SUPERSEDED` | `cannot-classify` -> follow accepted successor/currentness chain; inače `INVALID` | označava zamijenjenu reviziju, ne closed matter |
-| `WITHDRAWN` | `cannot-classify` -> `UNAVAILABLE` | povlačenje objekta/revizije nije accepted matter closure contract |
-| `VOIDED` | `cannot-classify` -> `INVALID` kada je jedini relevantni osnov | proceduralno nevalidan zapis ne dokazuje ni active ni non-active matter |
-| missing/conflicting currentness | `cannot-classify` -> `UNAVAILABLE`/`INVALID` prema §7 | nema dozvoljenog arbitrary winner-a |
-
-Nijedno accepted VLA lifecycle stanje trenutno ne daje `counts-as-active = true` ili `counts-as-active = false` za matter kao poslovnu cjelinu. `inactive/deactivated` u VLA-1A je generička operativna mogućnost čiji object-specific status ostaje kasnija odluka. Zato je M1 authority-blocked, a M4 i active-only portfolio roll-up zavisno blocked.
+Classification koristi effective chronology. Close/reopen mijenja rezultat samo od svojih effective granica; ne prepisuje prethodni interval.
 
 ### 4.2 `countsAsOpenActionAsOf(action, T)` decision lock
 
-`countsAsOpenActionAsOf` se primjenjuje tek nakon accepted currentness/supersession resolution-a nad stable `LEGAL_ACTION` identity-jem. Lifecycle, review, trust/verification i operational classification ostaju odvojeni.
+VOC-0 razdvaja `isLegalActionOpenAsOf`, `isLegalActionCompletedAsOf` i `isLegalActionActionableAsOf`. Sva tri se primjenjuju nakon currentness/supersession resolution-a nad stable `LEGAL_ACTION` identity-jem i vraćaju `TRUE | FALSE | UNRESOLVED`.
 
-| Accepted lifecycle state | Metrics classification za action | Razlog |
-|---|---|---|
-| `ACTIVE` | `cannot-classify` -> `UNAVAILABLE` | znači aktuelna revision; ista revision može konceptualno biti planned, active, blocked, completed ili cancelled dok operational vocabulary nije zaključan |
-| `SUPERSEDED` | exact revision `counts-as-open = false`; classification stable action-a prati accepted successor, inače `INVALID` | stara revision nije current, ali supersession ne govori da je radnja završena |
-| `WITHDRAWN` | `cannot-classify` bez object-specific effect resolution-a | VLA-1A izričito kaže da withdrawal ne poništava već applied effect |
-| `VOIDED` | exact revision `counts-as-open = false`; unresolved corrective/current action scope -> `INVALID` | voided zapis nije smio proizvoditi operativno dejstvo, ali ne bira niti stvara korektivnu action revision |
-| missing/conflicting operational state | `cannot-classify` -> `UNAVAILABLE`/`INVALID` | accepted operational vocabulary/resolver ne postoji |
+- completed je `TRUE` samo za authoritative `COMPLETED`;
+- `CANCELLED`, `SUPERSEDED` i `NO_LONGER_REQUIRED` nijesu completed, ali jesu terminalni za open;
+- open znači authoritative existence as of `T` bez authoritative terminal disposition effective as of `T`;
+- actionable zahtijeva open, odsustvo authoritative blocker/waiting state-a, zadovoljenu `earliestActionAt` granicu i svaki već deklarisani provjerljivi prerequisite.
 
-Review `PROPOSED/IN_REVIEW/ACCEPTED/REJECTED`, trust `UNASSESSED/CONFIRMED_FROM_SOURCE/ASSUMED`, source support, verification i approval ne znače automatski open, actionable, completed ili closed. VLA-0C `ACTIVE_LEGAL_ACTIONS` jeste projekciono mjesto, ali planned/active/blocked/completed/withdrawn/cancelled nijesu zaključani kao statusni rječnik. Zato je M2 authority-blocked, a M3/M4 zavisno blocked.
+Review, trust, source support, verification i approval ne znače automatski open, actionable ili completed. Naziv, opis, AI tekst, “next step” rečenica i UI pozicija nijesu structured authority.
 
 ### 4.3 Authoritative action due-instant decision lock
 
-Accepted VLA-0A definiše `DEADLINE` kao odvojeni, ručno uneseni i ljudski potvrđeni datum/obavezu, uz opcionu vezu ka `LEGAL_ACTION`; detaljna polja i operational status ostavlja VLA-0F. VLA-0E definiše porediva vremena i effective semantics, ali ne proglašava nijedno od njih action due time-om.
+`resolveActionDueInstant(actionId)` vraća `INSTANT | NULL | UNRESOLVED`. Full datetime sa authoritative timezone/offset-om direktno se normalizuje u instant. Date-only due mapira se na početak sljedećeg lokalnog kalendarskog dana u authoritative timezone-u; tada je overdue kada je `T >= dueInstant`.
 
-M3 može porediti samo accepted authoritative instant koji budući action/deadline contract eksplicitno mapira na action due time. Do tada:
-
-- `DEADLINE` datum se ne pretpostavlja automatski kao due instant radnje;
-- date-only vrijednost nema dovoljnu precision za poređenje sa instantom `evaluatedAt`;
-- zabranjeno je dodavanje `00:00`, `23:59`, lokalnog end-of-business-day pravila ili drugog heurističkog vremena;
-- `recorded_at`, `occurred_at`, `effective_at`, review time i filesystem `mtime` nijesu due-time zamjene;
-- missing precision ili neaccepted mapping daje `UNAVAILABLE`; invalid/conflicting temporal input daje `INVALID`.
-
-M3 formula ostaje design-defined, ali execution je deferred dok accepted authoritative action due-time contract ne odredi concept/field, temporal type, precision i typed relation.
+Timezone precedence je explicit due/action timezone, zatim canonical matter timezone samo ako postoji u accepted modelu, inače `UNRESOLVED`. Host timezone i skriveni `Europe/Belgrade` fallback su zabranjeni. `NULL` znači da authority eksplicitno kaže da roka nema; nije data-quality tvrdnja “not overdue”. Invalid ili konkurentni due podaci daju `UNRESOLVED` i ne popravljaju se heuristikom. Automatsko računanje zakonskih/procesnih rokova ostaje van scope-a.
 
 ### 4.4 Matter operational-state decision lock
 
-VLA-0C daje Matter State kao derived projekciju i segmentna članstva, VLA-0E daje `effective_at`/`effective_from` i as-of semantiku, a VLA-1A/1B daju canonical revision/currentness granicu. Baseline ipak ne definiše canonical matter operational-state identity, njegove object-specific transition/currentness rules ni obavezni effective start.
+`resolveMatterOperationalStateAsOf(matterId, T)` vraća state, `effectiveFrom`, provenance i `RESOLVED | UNRESOLVED`. Current je authoritative non-superseded state sa `effectiveFrom <= T` poslije kojeg nema kasnije effective transition prije ili na `T`.
 
-Zato M5 ne smije koristiti Matter State projection, naziv segmenta ili projection generation time kao authority. M5 ostaje design-forward contract; execution je deferred dok accepted canonical/event contract ne omogući jednoznačnu rekonstrukciju identity-ja, currentness-a as-of T i effective start-a.
+Effective chronology, ne file chronology, određuje currentness. Correction/supersession je explicit i ne briše original. Tie bez authority resolution-a i gap prije prvog state-a daju `UNRESOLVED`. Matter State projection, segment, UI ili generation time nijesu authority. Konačna operational taxonomy ostaje FIELD-0 provisional.
 
 ## 5. Evaluation-time contract
 
@@ -122,13 +113,13 @@ MetricResult = f(
 
 Za isti authoritative input/frontier, isti `evaluatedAt` i isti `metricDefinitionVersion`, rezultat mora biti semantički identičan, uključujući status, numeric value, contributing scope i traceability basis. Serialization metadata koja nema semantičko značenje ne ulazi u equality.
 
-MVS-0 default as-of query mapira jedan `evaluatedAt = T` na VLA-0E shorthand:
+MVS-0 default resolver koristi `evaluatedAt = T` kao effective-time granicu nad eksplicitno deklarisanim, danas prihvaćenim authoritative frontier-om:
 
 ```text
-as-effective-at(Te = T, Tk = T, Tr = T)
+effectiveTruthAsOf(Te = T, authoritativeFrontier)
 ```
 
-Time-zone zapis se normalizuje na isti UTC instant prije poređenja. `occurred_at`, `known_at`, `recorded_at`, review/verification vrijeme i `effective_at` ostaju odvojene ose. `evaluatedAt` ih ne preimenuje niti spaja; on određuje default cut-off-e za ovaj slice. Budući query sa odvojenim `Tk`, `Tr` i `Te` zahtijeva novu metric contract verziju ili eksplicitno kompatibilno proširenje.
+Time-zone zapis se normalizuje na isti UTC instant prije poređenja. `occurred_at`, `known_at`, `recorded_at`, review/verification vrijeme i `effective_at` ostaju odvojene ose. `evaluatedAt` ih ne preimenuje niti spaja. Kasnije prihvaćena explicit correction može promijeniti danas rekonstruisanu effective truth za raniji `T`, uz sačuvan originalni evidence trag. Known-at-time/bitemporal pitanje “šta je sistem znao u `Tk`/`Tr`” nije dio prvog slice-a i zahtijeva novu metric contract verziju.
 
 ## 6. Authority-resolution boundary
 
@@ -142,13 +133,13 @@ Metrics engine prima već razriješeno authoritative as-of stanje i dokaz njegov
 
 VLA-1B currentness se izvodi iz lifecycle/currentness records/events, supersession/replacement relacija, exact review/approval/apply rezultata, temporal/effective semantike i conflict/recovery/reconciliation stanja. FH-1 prihvaćeni `assessFrontier` u `spikes/foundation-hardening/dependency-frontier.ts` dokazuje samo direct exact-revision dependency coverage/currentness. Ne bira authoritative object revision, lifecycle/operational state niti historical effect. `spikes/foundation-hardening/rebuild.ts` i `history-and-recovery.ts` su eksplicitno exploratory i nijesu dio FH-1 acceptance-a.
 
-Stanje je zato corrective option **B: accepted arhitektonski contract postoji, executable resolver ne postoji**. Budući zasebno odobren executable WP smije napraviti samo minimalni authoritative as-of adapter:
+Corrective option **B** je sada realizovan kao minimalni isolated authoritative as-of adapter u `spikes/mvs-0-metrics/`:
 
 ```text
 VLA/FH authoritative as-of resolver -> immutable MVS-0 derivation input
 ```
 
-Adapter mora implementirati samo accepted VLA-0E/VLA-1A/1B pravila potrebna za synthetic fixture, biti test-only/isolated spike bez production coupling-a, reuse-ovati FH-1 accepted validation/frontier primitives gdje su primjenjivi i failovati zatvoreno za svaku semantiku koju baseline ne određuje. Ne smije fixture declaration pretvoriti u domain authority, projektovati novi statusni rječnik niti se predstavljati kao production resolver.
+Adapter implementira samo accepted VLA-0E/VLA-1A/1B i VOC-0 pravila potrebna za synthetic fixture, ostaje test-only/isolated spike bez production coupling-a, reuse-uje FH-1 accepted frontier primitive i failuje zatvoreno za semantiku koju authority ne razrješava. Fixture declaration nije domain authority, nije uveden production statusni rječnik i spike se ne predstavlja kao production resolver.
 
 Determinističko sortiranje po stable opaque ID-u dozvoljeno je samo za stabilan output. Ono nikad ne bira pobjednika između kontradiktornih autoritativnih state-ova.
 
@@ -177,7 +168,7 @@ Portfolio rezultat je `COMPLETE` samo kada declared portfolio scope/frontier dok
 | Isključenja | closed/non-active matters prema istom accepted classifier-u |
 | Failure | classification table §4.1 ne daje true/false -> `UNAVAILABLE` ili `INVALID` |
 
-VLA-0A lifecycle `ACTIVE` označava aktuelnu verziju objekta i nije sam po sebi dokaz da je predmet poslovno aktivan. MVS-0 ne uvodi literalni matter enum `ACTIVE`. M1 je `BLOCKED BY AUTHORITY CONTRACT`.
+VLA-0A revision lifecycle `ACTIVE` nije dokaz da je predmet poslovno aktivan. M1 koristi VOC-0 matter business lifecycle contract i `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` je.
 
 ## 9. M2 — Open Action Item Count
 
@@ -186,12 +177,12 @@ VLA-0A lifecycle `ACTIVE` označava aktuelnu verziju objekta i nije sam po sebi 
 | ID | `M2_OPEN_ACTION_ITEM_COUNT` |
 | Scope | matter; portfolio roll-up samo kroz active matters |
 | Autoritativni objekat | `LEGAL_ACTION` |
-| Definicija | broj authoritative actions koje accepted action classifier proglasi open/actionable as-of `evaluatedAt` |
+| Definicija | broj authoritative actions za koje `isLegalActionOpenAsOf` vraća `TRUE` as-of `evaluatedAt` |
 | Matter formula | `count(action where belongsToMatter && countsAsOpenActionAsOf(action, evaluatedAt) == true)` |
 | Portfolio formula | suma complete matter rezultata samo za M1-active matters |
 | Failure | classification table §4.2 ne daje finalni open/closed outcome -> `UNAVAILABLE` ili `INVALID` |
 
-Planned, active, blocked, completed, withdrawn i cancelled termini iz VLA-0C su opisne kategorije, ne zaključani konačni statusni rječnik. MVS-0 ih ne pretvara u enum. M2 je `BLOCKED BY AUTHORITY CONTRACT`.
+M2 ne zahtijeva actionability i ne računa terminalne actions kao open. M2 je `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL`.
 
 ## 10. M3 — Overdue Open Action Item Count
 
@@ -199,22 +190,22 @@ Planned, active, blocked, completed, withdrawn i cancelled termini iz VLA-0C su 
 |---|---|
 | ID | `M3_OVERDUE_OPEN_ACTION_ITEM_COUNT` |
 | Scope | matter; portfolio roll-up kroz active matters |
-| Definicija | open/actionable action sa authoritative due instant-om strogo prije `evaluatedAt` |
-| Formula | `countsAsOpenActionAsOf(action, T) == true && dueAt(action) exists && dueAt(action) < T` |
+| Definicija | open action čiji je resolved authoritative due boundary dostignut do `evaluatedAt` |
+| Formula | `isLegalActionOpenAsOf(action, T) == TRUE && resolveActionDueInstant(action) == dueInstant && T >= dueInstant` |
 
 Boundary pravila:
 
-- `dueAt < evaluatedAt` -> overdue;
-- `dueAt == evaluatedAt` -> nije overdue;
+- `dueInstant < evaluatedAt` -> overdue;
+- `dueInstant == evaluatedAt` -> overdue;
 - `dueAt > evaluatedAt` -> nije overdue;
 - open action bez authoritative due instant-a ulazi u M2, ali ne u M3;
-- completed/non-actionable action as-of T ne ulazi u M3 bez obzira na due instant;
+- terminal/non-open action as-of T ne ulazi u M3 bez obzira na due instant;
 - future-effective action koja još nije current as-of T ne ulazi;
 - invalid due instant ili nerazrješiv due/status conflict -> `INVALID` za pogođeni scope.
 
 `dueAt` je ovdje metric-level naziv za razriješeni authoritative due instant. Ne propisuje da `LEGAL_ACTION.payload` mora dobiti istoimeno polje niti spaja `LEGAL_ACTION` i `DEADLINE`. Ova metrika nije tvrdnja da je zakonski ili procesni rok propušten.
 
-M3 je `DESIGN DEFINED — EXECUTION DEFERRED`; dodatno zavisi od blocked M2 classification-a.
+M3 je `EXECUTABLE IN ISOLATED MVS-0`.
 
 ## 11. M4 — Active Matters Without Open Actions
 
@@ -228,7 +219,7 @@ M3 je `DESIGN DEFINED — EXECUTION DEFERRED`; dodatno zavisi od blocked M2 clas
 
 Naziv `Matters Without Next Action` je zabranjen u MVS-0 jer slice ne uvodi canonical next-action ordering contract.
 
-M4 je `BLOCKED BY AUTHORITY CONTRACT` jer zahtijeva i M1 i M2.
+M4 je `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` jer koristi provisional M1/M2 domain contracte.
 
 ## 12. M5 — Current Operational State Age
 
@@ -248,7 +239,7 @@ M4 je `BLOCKED BY AUTHORITY CONTRACT` jer zahtijeva i M1 i M2.
 - future-effective state se ne smatra current prije svoje effective granice;
 - validna starost od nula sekundi je `COMPLETE` sa value `0`.
 
-M5 je `DESIGN DEFINED — EXECUTION DEFERRED`.
+M5 je `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL`.
 
 ## 13. Projection and read model contract
 
@@ -264,9 +255,9 @@ Metrics projection mora konceptualno sadržati najmanje:
 - za svaki rezultat status, value kada je `COMPLETE`, reason code kada nije i minimalni traceability basis;
 - generation time kao tehnički metadata koji ne utiče na metric vrijednosti.
 
-Projection ne kopira cijele canonical objekte. Traceability basis koristi typed exact references na relevantne object/revision/event/receipt identitete i, za portfolio metric, deterministički uređenu listu contributing/excluded matter identiteta sa razlogom. Fizički metrics path i serialization schema nijesu zaključani ovim documentation pass-om; svaki budući artefakt mora ostati unutar VLA Layer 3/4 generated granice i izvan authority-ja.
+Projection ne kopira cijele canonical objekte. Traceability basis koristi typed exact references na relevantne object/revision/event/receipt identitete i, za portfolio metric, deterministički uređenu listu contributing/excluded matter identiteta sa razlogom. Spike serialization `mvs-0-projection/1` je prihvaćena samo kao isolated evidence schema; production metrics path i production serialization contract nijesu zaključani i svaki budući artefakt mora ostati unutar VLA Layer 3/4 generated granice i izvan authority-ja.
 
-Minimalni budući read sloj je semantički ekvivalentan:
+Minimalni isolated read sloj implementira:
 
 ```text
 getPortfolioMetrics() -> one persisted, validated portfolio result set
@@ -279,29 +270,29 @@ Read sloj validira schema/version/frontier i vraća sačuvane rezultate. Ne rač
 
 | Gap | Accepted source | Corrective resolution | Potpuno riješen? | Execution dependency |
 |---|---|---|---:|---|
-| matter active/non-active | VLA-0A lifecycle §14; VLA-1A §4.4 | §4.1 zaključava `cannot-classify`; nema metrics reinterpretacije `ACTIVE` | NE | novi accepted matter operational/closure contract |
-| action open/actionable/completed | VLA-0A axes/object taxonomy; VLA-0C Legal Actions; VLA-1A withdrawal rule | §4.2 zaključava lifecycle mapping i razdvajanje osa | NE | accepted `LEGAL_ACTION` operational contract |
-| action due instant | VLA-0A `DEADLINE`; VLA-0C Deadlines; VLA-0E temporal axes | §4.3 zabranjuje date heuristics i definiše fail-closed behavior | NE | accepted due concept/type/precision/relation |
-| operational-state currentness/effective start | VLA-0C projection; VLA-0E effective time; VLA-1A/1B currentness | §4.4 potvrđuje da projection nije authority i defer-uje execution | NE | accepted canonical matter operational-state contract |
-| as-of resolver/rebuild | VLA-0E reconstruction; VLA-1A/1B boundary; FH-1 decision log | option B; dozvoljen samo budući minimalni isolated fail-closed adapter | ARHITEKTONSKI DA; EXECUTABLE NE | poseban executable nalog i acceptance |
+| matter active/non-active | VLA/FH authority boundary + VOC-0 §4 | non-terminal matter business lifecycle as of `T`; FIELD-sensitive states provisional | DA, PROVISIONAL | FIELD-0 validation |
+| action open/actionable/completed | VLA/FH authority boundary + VOC-0 §5 | tri odvojena fail-closed resolvera | DA, PROVISIONAL | blocker taxonomy FIELD-0 |
+| action due instant | VLA temporal boundary + VOC-0 §6 | explicit datetime ili date-only next-local-day boundary; no hidden timezone | DA | eventualni office timezone FIELD-0 |
+| operational-state currentness/effective start | VLA effective/currentness boundary + VOC-0 §7 | effective chronology, explicit correction/supersession, conflict -> unresolved | DA, PROVISIONAL | operational taxonomy FIELD-0 |
+| as-of resolver/rebuild | VLA-0E/VLA-1A/1B/FH-1 + VOC-0 §8 | authority-only effective-as-of resolver; derived state disposable | DA | isolated evidence PASS; production adapter deferred |
 
-Ovo nijesu kontradikcije. Nijedan gap više nije implicitna pretpostavka, ali prva četiri ostaju authority blockers koje MVS-0 documentation ne smije riješiti promjenom VLA semantike.
+VOC-0 zatvara svih pet gap-ova bez promjene VLA revision lifecycle semantike. FIELD-sensitive stavke ostaju provisional, ali nijesu blocker za isolated MVS executable slice.
 
 ## 15. Final metric classification and minimal slice
 
 | Metric | Završna kategorija | Konkretan razlog |
 |---|---|---|
-| M1 | `BLOCKED BY AUTHORITY CONTRACT` | accepted lifecycle ne klasifikuje poslovno active/non-active matter |
-| M2 | `BLOCKED BY AUTHORITY CONTRACT` | accepted `LEGAL_ACTION` lifecycle ne klasifikuje open/actionable/completed |
-| M3 | `DESIGN DEFINED — EXECUTION DEFERRED` | formula je zaključana, ali M2 i authoritative instant-level due mapping nedostaju |
-| M4 | `BLOCKED BY AUTHORITY CONTRACT` | zavisi od blocked M1 i M2 |
-| M5 | `DESIGN DEFINED — EXECUTION DEFERRED` | nema canonical matter operational-state identity/currentness/effective-start contract-a |
+| M1 | `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` | VOC-0 matter lifecycle contract; FIELD statusi provisional |
+| M2 | `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` | VOC-0 open resolver; blocker taxonomy ne utiče na open count |
+| M3 | `EXECUTABLE IN ISOLATED MVS-0` | VOC-0 due-instant i open resolver contracti |
+| M4 | `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` | kompozicija M1 i M2 |
+| M5 | `EXECUTABLE IN ISOLATED MVS-0 — PROVISIONAL` | VOC-0 operational currentness/effective-start contract |
 
-Broj metrika `EXECUTABLE IN MVS-0`: **0**. Minimalni uspješni vertical slice zahtijeva najmanje tri povezane metrike; taj prag nije dostignut. MVS-0 executable WP ne smije početi na osnovu ovog dokumenta.
+Broj metrika `EXECUTABLE IN ISOLATED MVS-0`: **5**. Minimalni prag od tri povezane metrike je dostignut. Implementacija je završena samo kao izolovani spike/vertical slice bez production coupling-a.
 
 ## 16. Rebuildability invariant
 
-Buduća implementacija mora dokazati:
+Isolated executable implementacija dokazuje:
 
 1. synthetic authoritative fixture se persisted kroz dozvoljeni VLA/FH boundary;
 2. metrics se derive-uju za fiksni `evaluatedAt` i version;
@@ -316,12 +307,12 @@ Brisanje Matter State, metrics projection-a ili disposable index-a ne smije prom
 
 ## 17. Design decision
 
-Pet metric formula, evaluation-time semantics, strict failure behavior, non-authoritative projection, traceability i minimalni read model ostaju design-defined. Targeted review nije pronašao semantic contradiction, ali je dokazao da nema najmanje tri executable metrike bez novih accepted authority contracta.
+Pet metric formula, evaluation-time semantics, strict failure behavior, non-authoritative projection, traceability i minimalni read model ostaju design-defined. VOC-0 sada daje executable authority/domain contract za svih pet blockera, uz FIELD-0 provisional granicu.
 
-Zato je preporuka:
+Zato je acceptance disposition:
 
 ```text
-NO-GO — MVS-0 DESIGN
+GO — ISOLATED MVS-0 EXECUTABLE EVIDENCE ACCEPTED WITH FIELD-0 PROVISIONAL CONTRACTS
 ```
 
-Dokumenti se mogu human-reviewovati kao tačan gap/decision-lock zapis, ali MVS-0 se ne može human-acceptovati kao executable-ready design bez prethodne authority odluke za najmanje M1, M2 i treću povezanu metriku. Ovo ne odobrava executable implementation, izmjenu VLA/FH baseline-a, production coupling, stvarni workspace pristup ili commit.
+Ovo prihvata MVS-0 executable evidence samo za izolovani vertical slice i FIELD validation. Ne prihvata konačnu production-wide domain semantiku i ne odobrava produkcijski coupling, stvarni SDJ/OneDrive workspace, external network/API, commit ili push. Svaka promocija iz spike-a zahtijeva novi, zaseban acceptance.
