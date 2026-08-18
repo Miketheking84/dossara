@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { CONTROL_FILES, isSafeDirectChild, makeMatterFolderName, MATTER_FOLDERS, sanitizeFolderPart } from "@/lib/sdj-files";
+import { isMatterType } from "@/lib/sdj-matter-classification";
 import {
   parseMatterCommandCenter,
   resolveSafeClientForMutation,
@@ -69,6 +70,7 @@ export async function GET() {
                 let matterName = entry.name;
                 let clientName = clientEntry.name;
                 let legalArea = "";
+                let matterType = "";
                 let status = "";
                 let nextStep = "";
                 let deadline = "";
@@ -81,6 +83,7 @@ export async function GET() {
                   if (metadata.matter) matterName = metadata.matter;
                   if (metadata.client) clientName = metadata.client;
                   legalArea = metadata.legalArea ?? "";
+                  matterType = metadata.matterType ?? "";
                   status = metadata.status ?? "";
                   nextStep = metadata.nextStep ?? "";
                   deadline = metadata.deadline ?? "";
@@ -93,6 +96,7 @@ export async function GET() {
                   matterFolder: entry.name,
                   matterName,
                   legalArea,
+                  matterType,
                   status,
                   nextStep,
                   deadline,
@@ -133,6 +137,9 @@ export async function POST(request: Request) {
   }
   if (input.deadline && !isValidIsoDate(input.deadline)) {
     return NextResponse.json({ error: "Rok mora biti prazan ili stvaran datum u formatu YYYY-MM-DD." }, { status: 400 });
+  }
+  if (input.matterType && !isMatterType(input.matterType)) {
+    return NextResponse.json({ error: "Vrsta predmeta nije dozvoljena." }, { status: 400 });
   }
   const clientFolder = sanitizeFolderPart(input.client, 60);
   let clientPath: string;

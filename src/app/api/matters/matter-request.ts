@@ -7,6 +7,7 @@ export type MatterInput = {
   client: string;
   matterName: string;
   legalArea: string;
+  matterType: string;
   status: string;
   priority: string;
   description: string;
@@ -40,6 +41,7 @@ const MATTER_INPUT_FIELDS = [
   "client",
   "matterName",
   "legalArea",
+  "matterType",
   "status",
   "priority",
   "description",
@@ -65,6 +67,7 @@ function readInput(body: unknown): MatterInput | null {
     client: get("client"),
     matterName: get("matterName"),
     legalArea: get("legalArea") || "Opšte",
+    matterType: get("matterType"),
     status: get("status") || "Aktivan",
     priority: get("priority") || "Srednji",
     description: get("description"),

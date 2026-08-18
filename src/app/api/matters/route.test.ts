@@ -35,6 +35,7 @@ const validControlInput: MatterInput = {
   client: "TEST_CLIENT",
   matterName: "Test matter",
   legalArea: "Ugovorno pravo",
+  matterType: "Ugovorni predmet",
   status: "Aktivan",
   priority: "Srednji",
   description: "Opis",
@@ -296,6 +297,16 @@ describe("createMatterTransaction", () => {
     for (const folder of MATTER_FOLDERS) {
       expect(await pathExists(path.join(matterPath, folder))).toBe(true);
     }
+  });
+
+  it("stores the selected matter type in the file-first command center", async () => {
+    await run();
+
+    const commandCenter = await readFile(
+      path.join(matterPath, "00 CONTROL", "command-center.md"),
+      "utf8",
+    );
+    expect(commandCenter).toContain("Vrsta predmeta: Ugovorni predmet");
   });
 
   it("writes every CONTROL file exactly once in stable order with wx", async () => {

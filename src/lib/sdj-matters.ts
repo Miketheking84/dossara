@@ -56,6 +56,7 @@ export type MatterCommandCenterMetadata = {
   status: string | null;
   priority: string | null;
   legalArea: string | null;
+  matterType: string | null;
   nextStep: string | null;
   waitingFor: string | null;
   waitingDetail: string | null;
@@ -95,6 +96,7 @@ const COMMAND_CENTER_FIELDS = [
   ["Status", "status"],
   ["Prioritet", "priority"],
   ["Oblast prava", "legalArea"],
+  ["Vrsta predmeta", "matterType"],
   ["Sledeći korak", "nextStep"],
   ["Čeka se od", "waitingFor"],
   ["Detalj čekanja / napomena", "waitingDetail"],
@@ -123,6 +125,7 @@ function emptyCommandCenterMetadata(): MatterCommandCenterMetadata {
     status: null,
     priority: null,
     legalArea: null,
+    matterType: null,
     nextStep: null,
     waitingFor: null,
     waitingDetail: null,

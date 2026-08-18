@@ -120,6 +120,7 @@ export default async function MatterCockpitPage({
   const headerDetails = [
     metadata.openedAt ? [t("openedAt"), metadata.openedAt] : null,
     metadata.legalArea ? [t("legalArea"), metadata.legalArea] : null,
+    metadata.matterType ? [t("matterType"), metadata.matterType] : null,
   ].filter((item): item is [string, string] => item !== null);
   const initialWorkValues: MatterWorkValues = {
     status: metadata.status ?? "",

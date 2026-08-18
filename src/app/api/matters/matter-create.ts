@@ -152,7 +152,7 @@ function controlContents(
   registerRows: readonly string[],
 ) {
   const v = markdownValue;
-  const commandCenter = `# Command Center\n\nKlijent: ${v(input.client)}\nPredmet: ${v(input.matterName)}\nDatum otvaranja: ${v(input.openingDate)}\nStatus: ${v(input.status)}\nPrioritet: ${v(input.priority)}\nOblast prava: ${v(input.legalArea)}\nSledeći korak: ${v(input.nextStep)}\nČeka se od: ${v(input.waitingFrom)}\nDetalj čekanja / napomena: ${v(input.waitingDetail)}\nRok: ${v(input.deadline)}\nKratak opis: ${v(input.description)}\nKljučna pitanja:\nRizici:\nOčekivani output: ${v(input.expectedOutput)}\nStatus outputa:\nFinalni dokument:\nFinalni cilj:\n`;
+  const commandCenter = `# Command Center\n\nKlijent: ${v(input.client)}\nPredmet: ${v(input.matterName)}\nDatum otvaranja: ${v(input.openingDate)}\nStatus: ${v(input.status)}\nPrioritet: ${v(input.priority)}\nOblast prava: ${v(input.legalArea)}\nVrsta predmeta: ${v(input.matterType)}\nSledeći korak: ${v(input.nextStep)}\nČeka se od: ${v(input.waitingFrom)}\nDetalj čekanja / napomena: ${v(input.waitingDetail)}\nRok: ${v(input.deadline)}\nKratak opis: ${v(input.description)}\nKljučna pitanja:\nRizici:\nOčekivani output: ${v(input.expectedOutput)}\nStatus outputa:\nFinalni dokument:\nFinalni cilj:\n`;
   const actionSection =
     input.priority === "Hitno" || input.priority === "Visok"
       ? "Hitno"
