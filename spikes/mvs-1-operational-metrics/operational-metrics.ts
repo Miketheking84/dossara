@@ -5,12 +5,12 @@ import type {
   Resolution,
   ResolutionSeverity,
   UnresolvedReason,
-} from "../mvs-0-metrics/contracts";
+} from "./contracts";
 import {
   canonicalInstant,
   parseInstant,
   resolveDateOnlyDueInstant,
-} from "../mvs-0-metrics/temporal";
+} from "./temporal";
 import {
   MVS1_RULES_VERSION,
   type GoverningDue,

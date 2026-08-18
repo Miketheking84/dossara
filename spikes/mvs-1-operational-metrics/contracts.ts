@@ -1,11 +1,37 @@
 import type {
-  AuthorityReference,
-  Resolution,
-} from "../mvs-0-metrics/contracts";
-import type {
   DependencyFrontier,
   ObservedAuthority,
 } from "../foundation-hardening/dependency-frontier";
+
+export type ResolutionSeverity = "UNAVAILABLE" | "INVALID";
+
+export type UnresolvedReason =
+  | "CONFLICTING_AUTHORITY"
+  | "INVALID_TEMPORAL_DATA"
+  | "MISSING_TIMEZONE"
+  | "AMBIGUOUS_SUPERSESSION"
+  | "MISSING_AUTHORITY"
+  | "FRONTIER_STALE"
+  | "FRONTIER_INCOMPLETE"
+  | "FRONTIER_INVALID";
+
+export interface AuthorityReference {
+  recordId: string;
+  revisionId: string;
+}
+
+export type Resolution<T> =
+  | {
+      status: "RESOLVED";
+      value: T;
+      provenance: readonly AuthorityReference[];
+    }
+  | {
+      status: "UNRESOLVED";
+      reason: UnresolvedReason;
+      severity: ResolutionSeverity;
+      provenance: readonly AuthorityReference[];
+    };
 
 export const MVS1_RULES_VERSION = "voc-1/v1";
 export const MVS1_REGISTRY_VERSION = "mvs-1-registry/1";

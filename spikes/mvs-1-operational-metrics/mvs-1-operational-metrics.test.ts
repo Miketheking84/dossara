@@ -275,6 +275,34 @@ describe("MVS-1 VOC-1 operational primitives", () => {
     )).toMatchObject({ status: "RESOLVED", value: "OVERDUE" });
   });
 
+  it("normalizes a governing date-only due at the next local calendar boundary", () => {
+    const matterId = "matter-date-only";
+    const actionId = "action-date-only";
+    const authority = dataset(
+      "date-only",
+      [matterId],
+      [action(actionId, matterId)],
+      [
+        engagement(matterId, "OPEN"),
+        ...appliedActionFacts(actionId, matterId),
+        due(actionId, matterId, "date-only", "LEGAL_EXTERNAL", true, {
+          type: "DATE",
+          value: "2026-03-29",
+          timezone: "Europe/Belgrade",
+        }),
+      ],
+    );
+
+    expect(resolveGoverningDueInstantAsOf(authority, actionId, T)).toMatchObject({
+      status: "RESOLVED",
+      value: {
+        classification: "RESOLVED",
+        dueInstant: "2026-03-29T22:00:00.000Z",
+        ruleId: "VOC1_GOVERNING_CONFIRMED_DEADLINE",
+      },
+    });
+  });
+
   it("selects only the explicitly governing candidate among competing date kinds", () => {
     const result = resolveGoverningDueInstantAsOf(baselineDataset(), "action-f", T);
     expect(result).toMatchObject({
@@ -532,6 +560,7 @@ describe("MVS-1 persisted reconstruction", () => {
       "contracts.ts",
       "operational-metrics.ts",
       "persistence-harness.ts",
+      "temporal.ts",
     ].map((file) => readFile(path.join(
       process.cwd(),
       "spikes",
@@ -545,5 +574,6 @@ describe("MVS-1 persisted reconstruction", () => {
     expect(source).not.toMatch(/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/);
     expect(source).not.toMatch(/\bDate\.now\s*\(/);
     expect(source).not.toMatch(/\.localeCompare\s*\(/);
+    expect(source).not.toMatch(/mvs-0-metrics/);
   });
 });
