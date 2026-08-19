@@ -39,10 +39,26 @@ export interface BaselineRequest {
   matterId: string;
   transactionId: string;
   revisionId: string;
+  expectedReadToken: string;
   actor: string;
   source: string;
   recordedAt: string;
 }
+
+export type BaselineAcceptanceResult =
+  | {
+      code: "BASELINE_ACCEPTED" | "BASELINE_ALREADY_ACCEPTED";
+      transactionId: string;
+      revisionId: string;
+      readToken: string;
+    }
+  | {
+      code: "CONFLICT" | "EXTERNAL_BASELINE_REVIEW_REQUIRED";
+      transactionId: string;
+      observedReadToken: string;
+      currentRevisionId?: string;
+      detail: string;
+    };
 
 export interface MutationRequest {
   workspaceRoot: string;

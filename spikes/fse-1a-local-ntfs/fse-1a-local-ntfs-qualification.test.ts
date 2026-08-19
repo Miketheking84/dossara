@@ -55,11 +55,14 @@ async function workspace(bytes = controlBytes()): Promise<{ root: string; target
     matterId: "matter-1",
     transactionId: `baseline-${randomUUID()}`,
     revisionId: `baseline-revision-${randomUUID()}`,
+    expectedReadToken: exactReadToken(bytes),
     actor: "fse-1a-qualification",
     source: "FSE-1A_LOCAL_NTFS",
     recordedAt: "2026-08-19T10:00:00.000Z",
   };
-  return { root, target, baseline: await acceptMatterControlBaseline(baselineRequest) };
+  const baseline = await acceptMatterControlBaseline(baselineRequest);
+  if (baseline.code !== "BASELINE_ACCEPTED") throw new Error(`FSE-1A baseline failed: ${baseline.code}`);
+  return { root, target, baseline };
 }
 
 function mutation(fixture: Awaited<ReturnType<typeof workspace>>, id: string, overrides: Partial<MutationRequest> = {}): MutationRequest {
@@ -220,6 +223,7 @@ describe("FSE-1A supported local NTFS environment", () => {
     const request: BaselineRequest = {
       workspaceRoot: root, canonicalRelativePath: CONTROL_PATH, matterId: "matter-1",
       transactionId: "junction-baseline", revisionId: "junction-revision", actor: "fse-1a",
+      expectedReadToken: exactReadToken(controlBytes()),
       source: "FSE-1A_JUNCTION", recordedAt: "2026-08-19T10:00:00.000Z",
     };
     await expect(acceptMatterControlBaseline(request)).rejects.toMatchObject({ code: "VALIDATION_FAILED" });

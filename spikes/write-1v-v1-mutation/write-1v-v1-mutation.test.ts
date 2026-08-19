@@ -100,24 +100,59 @@ function controlBytes(options: { bom?: boolean; matterType?: string | null; dupl
 }
 
 async function workspace(bytes = controlBytes({ bom: true })): Promise<{ root: string; target: string; baseline: { revisionId: string; readToken: string } }> {
+  const fixture = await unacceptedWorkspace(bytes);
+  const baseline = await acceptMatterControlBaseline(baselineRequest(fixture, `baseline-${randomUUID()}`));
+  if (baseline.code !== "BASELINE_ACCEPTED") throw new Error(`WRITE-1V baseline failed: ${baseline.code}`);
+  return { ...fixture, baseline };
+}
+
+async function unacceptedWorkspace(bytes = controlBytes({ bom: true })): Promise<{ root: string; target: string; bytes: Buffer }> {
   await mkdir(PERMITTED_TEST_ROOT, { recursive: true });
   const root = await mkdtemp(path.join(PERMITTED_TEST_ROOT, "write1v-"));
   createdRoots.push(root);
   const target = path.join(root, CONTROL_PATH);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);
-  const baselineRequest: BaselineRequest = {
-    workspaceRoot: root,
+  return { root, target, bytes };
+}
+
+function baselineRequest(
+  fixture: Awaited<ReturnType<typeof unacceptedWorkspace>>,
+  transactionId: string,
+  overrides: Partial<BaselineRequest> = {},
+): BaselineRequest {
+  return {
+    workspaceRoot: fixture.root,
     canonicalRelativePath: CONTROL_PATH,
     matterId: "matter-1",
-    transactionId: `baseline-${randomUUID()}`,
-    revisionId: `revision-baseline-${randomUUID()}`,
+    transactionId,
+    revisionId: `revision-${transactionId}`,
+    expectedReadToken: exactReadToken(fixture.bytes),
     actor: "write-1v-test",
     source: "WRITE-1V_BASELINE",
     recordedAt: "2026-08-18T12:00:00.000Z",
+    ...overrides,
   };
-  const baseline = await acceptMatterControlBaseline(baselineRequest);
-  return { root, target, baseline };
+}
+
+async function evidenceJsonFiles(root: string): Promise<string[]> {
+  const result: string[] = [];
+  async function visit(directory: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    for (const entry of entries) {
+      const child = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(child);
+      else if (entry.isFile() && entry.name.endsWith(".json")) result.push(child);
+    }
+  }
+  await visit(path.join(root, "00 CONTROL", "vla", "objects"));
+  return result.sort();
 }
 
 function request(
@@ -143,6 +178,122 @@ function request(
 
 afterEach(async () => {
   await Promise.all(createdRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("BASE-1 exact-token external baseline acceptance", () => {
+  it("B1 accepts an unrecognized canonical baseline only for its exact raw-byte token", async () => {
+    const fixture = await unacceptedWorkspace();
+    const result = await acceptMatterControlBaseline(baselineRequest(fixture, "base-b1"));
+    expect(result).toMatchObject({ code: "BASELINE_ACCEPTED", revisionId: "revision-base-b1", readToken: exactReadToken(fixture.bytes) });
+  });
+
+  it("B2 returns CONFLICT for a wrong exact-byte token", async () => {
+    const fixture = await unacceptedWorkspace();
+    const result = await acceptMatterControlBaseline(baselineRequest(fixture, "base-b2", { expectedReadToken: exactReadToken(Buffer.from("wrong")) }));
+    expect(result).toMatchObject({ code: "CONFLICT", observedReadToken: exactReadToken(fixture.bytes) });
+  });
+
+  it("B3 detects a manual edit between read and baseline acceptance", async () => {
+    const fixture = await unacceptedWorkspace();
+    const reviewedToken = exactReadToken(fixture.bytes);
+    const manual = Buffer.concat([fixture.bytes, Buffer.from("Manual V2\r\n")]);
+    await writeFile(fixture.target, manual);
+    const result = await acceptMatterControlBaseline(baselineRequest(fixture, "base-b3", { expectedReadToken: reviewedToken }));
+    expect(result.code).toBe("CONFLICT");
+    expect(await readFile(fixture.target)).toEqual(manual);
+  });
+
+  it("B4 writes no accepted revision or receipt for a conflict", async () => {
+    const fixture = await unacceptedWorkspace();
+    const result = await acceptMatterControlBaseline(baselineRequest(fixture, "base-b4", { expectedReadToken: exactReadToken(Buffer.from("stale")) }));
+    expect(result.code).toBe("CONFLICT");
+    expect(await evidenceJsonFiles(fixture.root)).toEqual([]);
+    expect(await currentMatterControl(fixture.root, "matter-1", CONTROL_PATH)).toBeUndefined();
+  });
+
+  it("B5 leaves canonical bytes byte-identical after successful acceptance", async () => {
+    const fixture = await unacceptedWorkspace(controlBytes({ bom: true, newline: "\n" }));
+    const before = await readFile(fixture.target);
+    expect((await acceptMatterControlBaseline(baselineRequest(fixture, "base-b5"))).code).toBe("BASELINE_ACCEPTED");
+    expect(await readFile(fixture.target)).toEqual(before);
+  });
+
+  it("B6 exposes a usable accepted revision identity and exact token", async () => {
+    const fixture = await unacceptedWorkspace();
+    const accepted = await acceptMatterControlBaseline(baselineRequest(fixture, "base-b6"));
+    expect(accepted.code).toBe("BASELINE_ACCEPTED");
+    expect(await currentMatterControl(fixture.root, "matter-1", CONTROL_PATH)).toMatchObject({ revisionId: "revision-base-b6", readToken: exactReadToken(fixture.bytes) });
+  });
+
+  it("B7 permits a following nextStep mutation from the accepted baseline", async () => {
+    const fixture = await workspace();
+    const result = await mutateMatterControl(request(fixture, "base-b7", { mutations: [{ field: "nextStep", value: "BASE-1 naredni korak" }] }));
+    expect(result.code).toBe("CANONICAL_SUCCESS");
+    expect(await readFile(fixture.target, "utf8")).toContain("Sledeći korak: BASE-1 naredni korak");
+  });
+
+  it("B8 permits a following accepted Matter Type mutation", async () => {
+    const fixture = await workspace();
+    const result = await mutateMatterControl(request(fixture, "base-b8", { mutations: [{ field: "matterType", value: "Privredni spor" }] }));
+    expect(result.code).toBe("CANONICAL_SUCCESS");
+    expect(await readFile(fixture.target, "utf8")).toContain("Vrsta predmeta: Privredni spor");
+  });
+
+  it("B9 preserves unknown and manual continuation bytes during acceptance", async () => {
+    const fixture = await unacceptedWorkspace();
+    const before = await readFile(fixture.target);
+    expect((await acceptMatterControlBaseline(baselineRequest(fixture, "base-b9"))).code).toBe("BASELINE_ACCEPTED");
+    expect(await readFile(fixture.target)).toEqual(before);
+    expect(before.toString("utf8")).toContain("  nastavak koji nije poznato polje");
+  });
+
+  it("B10 preserves a legacy unknown Matter Type through onboarding and nextStep mutation", async () => {
+    const fixture = await workspace(controlBytes({ matterType: "Nasljedno pravo" }));
+    expect((await mutateMatterControl(request(fixture, "base-b10"))).code).toBe("CANONICAL_SUCCESS");
+    expect(await readFile(fixture.target, "utf8")).toContain("Vrsta predmeta: Nasljedno pravo");
+  });
+
+  it("B11 keeps a missing Matter Type missing through onboarding and nextStep mutation", async () => {
+    const fixture = await workspace(controlBytes({ matterType: null }));
+    expect((await mutateMatterControl(request(fixture, "base-b11"))).code).toBe("CANONICAL_SUCCESS");
+    expect(await readFile(fixture.target, "utf8")).not.toContain("Vrsta predmeta:");
+  });
+
+  it("B12 deterministically reuses one accepted baseline for concurrent same-token attempts", async () => {
+    const fixture = await unacceptedWorkspace();
+    const [first, second] = await Promise.all([
+      acceptMatterControlBaseline(baselineRequest(fixture, "base-b12-first")),
+      acceptMatterControlBaseline(baselineRequest(fixture, "base-b12-second")),
+    ]);
+    expect([first.code, second.code].sort()).toEqual(["BASELINE_ACCEPTED", "BASELINE_ALREADY_ACCEPTED"]);
+    const accepted = first.code === "BASELINE_ACCEPTED" ? first : second;
+    const repeated = first.code === "BASELINE_ALREADY_ACCEPTED" ? first : second;
+    if (accepted.code !== "BASELINE_ACCEPTED" || repeated.code !== "BASELINE_ALREADY_ACCEPTED") {
+      throw new Error("Concurrent baseline outcomes were not deterministic");
+    }
+    expect(repeated).toMatchObject({ revisionId: accepted.revisionId, readToken: accepted.readToken });
+    expect(await evidenceJsonFiles(fixture.root)).toHaveLength(2);
+  });
+
+  it("does not create a new initial baseline over an existing accepted history", async () => {
+    const fixture = await workspace();
+    const manual = Buffer.concat([await readFile(fixture.target), Buffer.from("External V2\r\n")]);
+    await writeFile(fixture.target, manual);
+    const result = await acceptMatterControlBaseline(baselineRequest(
+      { root: fixture.root, target: fixture.target, bytes: manual },
+      "base-existing-history",
+    ));
+    expect(result).toMatchObject({
+      code: "EXTERNAL_BASELINE_REVIEW_REQUIRED",
+      currentRevisionId: fixture.baseline.revisionId,
+      observedReadToken: exactReadToken(manual),
+    });
+    expect(await evidenceJsonFiles(fixture.root)).toHaveLength(2);
+    expect(await currentMatterControl(fixture.root, "matter-1", CONTROL_PATH)).toMatchObject({
+      revisionId: fixture.baseline.revisionId,
+      readToken: fixture.baseline.readToken,
+    });
+  });
 });
 
 describe("WRITE-1V exact-byte and lossless mutation contract", () => {
@@ -355,6 +506,7 @@ describe("WRITE-1V Windows identity, sharing and namespace qualification", () =>
       matterId: "matter-1",
       transactionId: `wrong-matter-${randomUUID()}`,
       revisionId: `wrong-matter-revision-${randomUUID()}`,
+      expectedReadToken: exactReadToken(controlBytes()),
       actor: "write-1v-test",
       source: "WRITE-1V_WRONG_MATTER",
       recordedAt: "2026-08-18T12:00:00.000Z",
