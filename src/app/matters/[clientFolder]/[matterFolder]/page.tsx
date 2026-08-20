@@ -209,6 +209,7 @@ export default async function MatterCockpitPage({
             <MatterWorkEditor
               clientFolder={resolvedMatter.clientFolder}
               matterFolder={resolvedMatter.matterFolder}
+              initialMatterType={metadata.matterType ?? ""}
               initialValues={initialWorkValues}
             />
             <PresentMetadataSection

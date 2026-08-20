@@ -3,17 +3,29 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  MATTER_WORK_PRIORITIES,
-  MATTER_WORK_STATUSES,
-  MATTER_WORK_WAITING_OPTIONS,
-  type MatterWorkValues,
-} from "@/lib/sdj-work-fields";
+import { MATTER_TYPES, isMatterType } from "@/lib/sdj-matter-classification";
+import type { MatterWorkValues } from "@/lib/sdj-work-fields";
 
-const DISPLAY_FIELDS = [
+type EditableField = "matterType" | "nextStep";
+type BaselineState = "BASELINE_REQUIRED" | "CURRENT" | "EXTERNAL_BASELINE_REVIEW_REQUIRED";
+
+type CanonicalState = {
+  readToken: string;
+  acceptedRevisionId?: string;
+  baselineState: BaselineState;
+  publicationReady: boolean;
+  values: { matterType: string; nextStep: string };
+};
+
+type ApiResult = Partial<CanonicalState> & {
+  code?: string;
+  error?: string;
+  value?: string;
+};
+
+const READ_ONLY_FIELDS = [
   ["status", "status"],
   ["priority", "priority"],
-  ["nextStep", "nextStep"],
   ["waitingFor", "waitingFor"],
   ["waitingDetail", "waitingDetail"],
   ["deadline", "deadline"],
@@ -22,99 +34,239 @@ const DISPLAY_FIELDS = [
 export function MatterWorkEditor({
   clientFolder,
   matterFolder,
+  initialMatterType,
   initialValues,
 }: {
   clientFolder: string;
   matterFolder: string;
+  initialMatterType: string;
   initialValues: MatterWorkValues;
 }) {
   const t = useTranslations("MatterCockpit");
   const router = useRouter();
-  const [values, setValues] = useState(initialValues);
-  const [draft, setDraft] = useState(initialValues);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [matterType, setMatterType] = useState(initialMatterType);
+  const [nextStep, setNextStep] = useState(initialValues.nextStep);
+  const [canonical, setCanonical] = useState<CanonicalState | null>(null);
+  const [requestedField, setRequestedField] = useState<EditableField | null>(null);
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const visibleFields = DISPLAY_FIELDS.filter(([field]) => values[field] !== "");
 
-  function setDraftField(field: keyof MatterWorkValues, value: string) {
-    setDraft((current) => ({ ...current, [field]: value }));
+  async function loadCanonicalState(): Promise<CanonicalState> {
+    const query = new URLSearchParams({ clientFolder, matterFolder });
+    const response = await fetch(`/api/matters/command-center?${query.toString()}`, {
+      cache: "no-store",
+    });
+    const data = (await response.json()) as ApiResult;
+    if (!response.ok || !data.readToken || !data.baselineState || !data.values) {
+      throw new Error(data.error || t("canonicalReadFailed"));
+    }
+    const state = data as CanonicalState;
+    setCanonical(state);
+    setMatterType(state.values.matterType);
+    setNextStep(state.values.nextStep);
+    if (!state.publicationReady) throw new Error(t("publicationUnavailable"));
+    return state;
   }
 
-  function beginEditing() {
-    setDraft(values);
+  function openEditor(field: EditableField, state: CanonicalState) {
+    setDraft(field === "matterType" ? state.values.matterType : state.values.nextStep);
+    setEditingField(field);
+    setRequestedField(null);
+  }
+
+  async function beginEditing(field: EditableField) {
+    setBusy(true);
     setMessage(null);
-    setEditing(true);
+    setRequestedField(field);
+    try {
+      const state = await loadCanonicalState();
+      if (state.baselineState === "CURRENT" && state.acceptedRevisionId) {
+        openEditor(field, state);
+      } else if (state.baselineState === "BASELINE_REQUIRED") {
+        setMessage({ kind: "error", text: t("baselineRequired") });
+      } else {
+        setMessage({ kind: "error", text: t("externalReviewRequired") });
+      }
+    } catch (error) {
+      setRequestedField(null);
+      setMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : t("canonicalReadFailed"),
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function cancelEditing() {
-    setDraft(values);
-    setMessage(null);
-    setEditing(false);
-  }
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
+  async function acceptBaseline() {
+    if (
+      !canonical ||
+      !canonical.publicationReady ||
+      canonical.baselineState !== "BASELINE_REQUIRED"
+    ) return;
+    setBusy(true);
     setMessage(null);
     try {
       const response = await fetch("/api/matters/command-center", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientFolder, matterFolder, values: draft }),
+        body: JSON.stringify({
+          clientFolder,
+          matterFolder,
+          expectedReadToken: canonical.readToken,
+        }),
       });
-      const data = (await response.json()) as { error?: string; values?: MatterWorkValues };
-      if (!response.ok || !data.values) throw new Error(data.error || t("workSaveFailed"));
-      setValues(data.values);
-      setDraft(data.values);
-      setEditing(false);
+      const data = (await response.json()) as ApiResult;
+      if (!response.ok || !data.readToken || !data.acceptedRevisionId) {
+        if (response.status === 409) await loadCanonicalState();
+        throw new Error(data.error || t("baselineFailed"));
+      }
+      const accepted: CanonicalState = {
+        ...canonical,
+        baselineState: "CURRENT",
+        readToken: data.readToken,
+        acceptedRevisionId: data.acceptedRevisionId,
+      };
+      setCanonical(accepted);
+      setMessage({ kind: "success", text: t("baselineAccepted") });
+      if (requestedField) openEditor(requestedField, accepted);
+    } catch (error) {
+      setMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : t("baselineFailed"),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancelEditing() {
+    setEditingField(null);
+    setRequestedField(null);
+    setDraft("");
+    setMessage(null);
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingField || !canonical?.acceptedRevisionId) return;
+    const currentValue = editingField === "matterType" ? matterType : nextStep;
+    if (draft === currentValue) {
+      cancelEditing();
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/matters/command-center", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientFolder,
+          matterFolder,
+          field: editingField,
+          value: draft,
+          expectedReadToken: canonical.readToken,
+          acceptedRevisionId: canonical.acceptedRevisionId,
+        }),
+      });
+      const data = (await response.json()) as ApiResult;
+      if (!response.ok || !data.readToken || !data.acceptedRevisionId) {
+        if (response.status === 409) await loadCanonicalState();
+        throw new Error(data.error || t("workSaveFailed"));
+      }
+      if (editingField === "matterType") setMatterType(draft);
+      else setNextStep(draft);
+      setCanonical({
+        ...canonical,
+        readToken: data.readToken,
+        acceptedRevisionId: data.acceptedRevisionId,
+        baselineState: "CURRENT",
+        values: {
+          matterType: editingField === "matterType" ? draft : matterType,
+          nextStep: editingField === "nextStep" ? draft : nextStep,
+        },
+      });
+      setEditingField(null);
+      setDraft("");
       setMessage({ kind: "success", text: t("workSaved") });
       router.refresh();
     } catch (error) {
+      setEditingField(null);
+      setDraft("");
       setMessage({
         kind: "error",
         text: error instanceof Error ? error.message : t("workSaveFailed"),
       });
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
+
+  const legacyMatterType = matterType !== "" && !isMatterType(matterType) ? matterType : null;
 
   return (
     <section className="work-panel matter-cockpit-section">
       <div className="panel-heading matter-work-heading">
         <div>
           <h2>{t("workTitle")}</h2>
-          <p>{t("workDescription")}</p>
+          <p>{t("safeWorkDescription")}</p>
         </div>
-        {!editing ? <button type="button" onClick={beginEditing}>{t("editWork")}</button> : null}
       </div>
 
-      {editing ? (
+      <dl className="matter-cockpit-detail-grid">
+        <div>
+          <dt>{t("matterType")}</dt>
+          <dd>{matterType || t("notSet")}</dd>
+          <button type="button" disabled={busy || editingField !== null} onClick={() => void beginEditing("matterType")}>{t("editMatterType")}</button>
+        </div>
+        <div>
+          <dt>{t("nextStep")}</dt>
+          <dd>{nextStep || t("notSet")}</dd>
+          <button type="button" disabled={busy || editingField !== null} onClick={() => void beginEditing("nextStep")}>{t("editNextStep")}</button>
+        </div>
+        {READ_ONLY_FIELDS.map(([field, label]) => (
+          <div key={field}>
+            <dt>{t(label)}</dt>
+            <dd>{initialValues[field] || t("notSet")}</dd>
+            <small>{t("readOnlyV1")}</small>
+          </div>
+        ))}
+      </dl>
+
+      {canonical?.baselineState === "BASELINE_REQUIRED" && canonical.publicationReady ? (
+        <div className="matter-work-form-actions">
+          <button type="button" disabled={busy} onClick={() => void acceptBaseline()}>
+            {busy ? t("acceptingBaseline") : t("acceptBaseline")}
+          </button>
+        </div>
+      ) : null}
+
+      {editingField ? (
         <form className="matter-work-form" onSubmit={save}>
-          <label><span>{t("status")}</span><select value={draft.status} onChange={(event) => setDraftField("status", event.target.value)}><option value="">{t("notSet")}</option>{MATTER_WORK_STATUSES.map((option) => <option key={option}>{option}</option>)}</select></label>
-          <label><span>{t("priority")}</span><select value={draft.priority} onChange={(event) => setDraftField("priority", event.target.value)}><option value="">{t("notSet")}</option>{MATTER_WORK_PRIORITIES.map((option) => <option key={option}>{option}</option>)}</select></label>
-          <label className="matter-work-wide"><span>{t("nextStep")}</span><textarea rows={3} maxLength={500} value={draft.nextStep} onChange={(event) => setDraftField("nextStep", event.target.value)} /></label>
-          <label><span>{t("deadline")}</span><input type="date" value={draft.deadline} onChange={(event) => setDraftField("deadline", event.target.value)} /></label>
-          <label><span>{t("waitingFor")}</span><select value={draft.waitingFor} onChange={(event) => setDraftField("waitingFor", event.target.value)}><option value="">{t("notSet")}</option>{MATTER_WORK_WAITING_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
-          <label className="matter-work-wide"><span>{t("waitingDetail")}</span><input maxLength={500} value={draft.waitingDetail} onChange={(event) => setDraftField("waitingDetail", event.target.value)} /></label>
+          {editingField === "matterType" ? (
+            <label>
+              <span>{t("matterType")}</span>
+              <select value={draft} required onChange={(event) => setDraft(event.target.value)}>
+                <option value="" disabled>{t("notSet")}</option>
+                {legacyMatterType ? <option value={legacyMatterType} disabled>{legacyMatterType}</option> : null}
+                {MATTER_TYPES.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+          ) : (
+            <label className="matter-work-wide">
+              <span>{t("nextStep")}</span>
+              <input required maxLength={500} value={draft} onChange={(event) => setDraft(event.target.value)} />
+            </label>
+          )}
           <div className="matter-work-form-actions">
-            <button type="button" onClick={cancelEditing} disabled={saving}>{t("cancelEdit")}</button>
-            <button type="submit" disabled={saving}>{saving ? t("savingWork") : t("saveWork")}</button>
+            <button type="button" onClick={cancelEditing} disabled={busy}>{t("cancelEdit")}</button>
+            <button type="submit" disabled={busy}>{busy ? t("savingWork") : t("saveWork")}</button>
           </div>
         </form>
-      ) : visibleFields.length > 0 ? (
-        <dl className="matter-cockpit-detail-grid">
-          {visibleFields.map(([field, label]) => (
-            <div key={field}>
-              <dt>{t(label)}</dt>
-              <dd>{values[field]}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="matter-cockpit-empty">{t("workEmpty")}</p>
-      )}
+      ) : null}
 
       {message ? <p className={message.kind === "success" ? "matter-work-message" : "matter-work-message error"} role="status">{message.text}</p> : null}
     </section>
