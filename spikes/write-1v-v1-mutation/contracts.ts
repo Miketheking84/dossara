@@ -35,6 +35,7 @@ export type FailurePoint =
 
 export interface BaselineRequest {
   workspaceRoot: string;
+  evidenceStorageRoot?: string;
   canonicalRelativePath: string;
   matterId: string;
   transactionId: string;
@@ -47,7 +48,10 @@ export interface BaselineRequest {
 
 export type BaselineAcceptanceResult =
   | {
-      code: "BASELINE_ACCEPTED" | "BASELINE_ALREADY_ACCEPTED";
+      code:
+        | "BASELINE_ACCEPTED"
+        | "BASELINE_ALREADY_ACCEPTED"
+        | "EXTERNAL_BASELINE_ACCEPTED";
       transactionId: string;
       revisionId: string;
       readToken: string;
@@ -62,6 +66,7 @@ export type BaselineAcceptanceResult =
 
 export interface MutationRequest {
   workspaceRoot: string;
+  evidenceStorageRoot?: string;
   canonicalRelativePath: string;
   matterId: string;
   transactionId: string;
@@ -93,7 +98,10 @@ export interface MutationResult {
   detail?: string;
 }
 
-export type EvidenceState = "ACCEPTED_BASELINE" | "PREPARED";
+export type EvidenceState =
+  | "ACCEPTED_BASELINE"
+  | "EXTERNAL_BASELINE_ACCEPTED"
+  | "PREPARED";
 
 export interface MatterControlPayload {
   state: EvidenceState;
@@ -129,7 +137,7 @@ export interface OutcomePayload {
 }
 
 export interface ReceiptPayload {
-  state: "SUCCESS" | "BASELINE_ACCEPTED";
+  state: "SUCCESS" | "BASELINE_ACCEPTED" | "EXTERNAL_BASELINE_ACCEPTED";
   transactionId: string;
   matterId: string;
   canonicalRelativePath: string;

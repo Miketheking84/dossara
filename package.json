@@ -4,11 +4,14 @@
   "private": true,
   "main": "./.webpack/main",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",
+    "test:pre-field-1a": "vitest run --no-file-parallelism scripts/verify-loopback-binding.test.ts src/lib/sdj-command-center-update.test.ts src/lib/sdj-canonical-mutation.test.ts src/app/api/matters/command-center/route.test.ts spikes/write-1v-v1-mutation/write-1v-v1-mutation.test.ts spikes/fse-1a-local-ntfs/fse-1a-local-ntfs-qualification.test.ts",
+    "verify:loopback": "node scripts/verify-loopback-binding.mjs start",
+    "field:preflight": "npm run test:pre-field-1a && tsc --noEmit && npm run lint && npm run build && npm run verify:loopback",
     "desktop:start": "electron-forge start",
     "desktop:package": "electron-forge package",
     "desktop:smoke": "node scripts/desktop/b0-smoke.cjs"

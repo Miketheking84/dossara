@@ -100,17 +100,19 @@ export function MatterWorkEditor({
     }
   }
 
-  async function acceptBaseline() {
+  async function acceptBaseline(external: boolean) {
     if (
       !canonical ||
       !canonical.publicationReady ||
-      canonical.baselineState !== "BASELINE_REQUIRED"
+      canonical.baselineState !== (
+        external ? "EXTERNAL_BASELINE_REVIEW_REQUIRED" : "BASELINE_REQUIRED"
+      )
     ) return;
     setBusy(true);
     setMessage(null);
     try {
       const response = await fetch("/api/matters/command-center", {
-        method: "POST",
+        method: external ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientFolder,
@@ -130,12 +132,17 @@ export function MatterWorkEditor({
         acceptedRevisionId: data.acceptedRevisionId,
       };
       setCanonical(accepted);
-      setMessage({ kind: "success", text: t("baselineAccepted") });
+      setMessage({
+        kind: "success",
+        text: t(external ? "externalBaselineAccepted" : "baselineAccepted"),
+      });
       if (requestedField) openEditor(requestedField, accepted);
     } catch (error) {
       setMessage({
         kind: "error",
-        text: error instanceof Error ? error.message : t("baselineFailed"),
+        text: error instanceof Error
+          ? error.message
+          : t(external ? "externalBaselineFailed" : "baselineFailed"),
       });
     } finally {
       setBusy(false);
@@ -238,8 +245,16 @@ export function MatterWorkEditor({
 
       {canonical?.baselineState === "BASELINE_REQUIRED" && canonical.publicationReady ? (
         <div className="matter-work-form-actions">
-          <button type="button" disabled={busy} onClick={() => void acceptBaseline()}>
+          <button type="button" disabled={busy} onClick={() => void acceptBaseline(false)}>
             {busy ? t("acceptingBaseline") : t("acceptBaseline")}
+          </button>
+        </div>
+      ) : null}
+
+      {canonical?.baselineState === "EXTERNAL_BASELINE_REVIEW_REQUIRED" && canonical.publicationReady ? (
+        <div className="matter-work-form-actions">
+          <button type="button" disabled={busy} onClick={() => void acceptBaseline(true)}>
+            {busy ? t("acceptingExternalBaseline") : t("acceptExternalBaseline")}
           </button>
         </div>
       ) : null}

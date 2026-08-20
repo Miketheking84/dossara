@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  acceptExternalMatterControlBaseline,
   acceptMatterControlBaseline,
   currentMatterControl,
   exactReadToken,
@@ -41,6 +42,7 @@ export type CanonicalMatterState = {
 
 type CanonicalDescriptor = {
   workspaceRoot: string;
+  evidenceStorageRoot: string;
   canonicalRelativePath: string;
   matterId: string;
   commandCenterPath: string;
@@ -50,6 +52,7 @@ function canonicalDescriptor(matter: ResolvedActiveMatter): CanonicalDescriptor 
   const commandCenterPath = path.join(matter.controlPath, "command-center.md");
   return {
     workspaceRoot: matter.workspaceRoot,
+    evidenceStorageRoot: matter.matterPath,
     canonicalRelativePath: path.relative(matter.workspaceRoot, commandCenterPath),
     matterId: `${matter.clientFolder}/${matter.matterFolder}`,
     commandCenterPath,
@@ -72,7 +75,7 @@ export async function readCanonicalMatterState(
   const metadata = parseMatterCommandCenter(decodeStrictUtf8(bytes)).metadata;
   const [current, publicationReady] = await Promise.all([
     currentMatterControl(
-      descriptor.workspaceRoot,
+      descriptor.evidenceStorageRoot,
       descriptor.matterId,
       descriptor.canonicalRelativePath,
     ),
@@ -104,9 +107,29 @@ export async function acceptCanonicalMatterBaseline(
   const transactionId = randomUUID();
   return acceptMatterControlBaseline({
     workspaceRoot: descriptor.workspaceRoot,
+    evidenceStorageRoot: descriptor.evidenceStorageRoot,
     canonicalRelativePath: descriptor.canonicalRelativePath,
     matterId: descriptor.matterId,
     transactionId,
+    revisionId: randomUUID(),
+    expectedReadToken,
+    actor: ACTOR,
+    source: SOURCE,
+    recordedAt: new Date().toISOString(),
+  });
+}
+
+export async function acceptExternalCanonicalMatterBaseline(
+  matter: ResolvedActiveMatter,
+  expectedReadToken: string,
+): Promise<BaselineAcceptanceResult> {
+  const descriptor = canonicalDescriptor(matter);
+  return acceptExternalMatterControlBaseline({
+    workspaceRoot: descriptor.workspaceRoot,
+    evidenceStorageRoot: descriptor.evidenceStorageRoot,
+    canonicalRelativePath: descriptor.canonicalRelativePath,
+    matterId: descriptor.matterId,
+    transactionId: randomUUID(),
     revisionId: randomUUID(),
     expectedReadToken,
     actor: ACTOR,
@@ -127,6 +150,7 @@ export async function mutateCanonicalMatter(
   const descriptor = canonicalDescriptor(matter);
   return mutateMatterControl({
     workspaceRoot: descriptor.workspaceRoot,
+    evidenceStorageRoot: descriptor.evidenceStorageRoot,
     canonicalRelativePath: descriptor.canonicalRelativePath,
     matterId: descriptor.matterId,
     transactionId: randomUUID(),

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mutationMocks = vi.hoisted(() => ({
   readCanonicalMatterState: vi.fn(),
   acceptCanonicalMatterBaseline: vi.fn(),
+  acceptExternalCanonicalMatterBaseline: vi.fn(),
   mutateCanonicalMatter: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ import {
   GET,
   PATCH,
   POST,
+  PUT,
   parseBaselineRequest,
   parseMutationRequest,
 } from "./route";
@@ -32,7 +34,7 @@ const TOKEN = `sha256:${"a".repeat(64)}`;
 const NEXT_TOKEN = `sha256:${"b".repeat(64)}`;
 const matter = { clientFolder: "TEST", matterFolder: "SDJ_TEST" };
 
-function jsonRequest(method: "POST" | "PATCH", body: unknown) {
+function jsonRequest(method: "POST" | "PUT" | "PATCH", body: unknown) {
   return new Request("http://localhost/api/matters/command-center", {
     method,
     headers: { "Content-Type": "application/json" },
@@ -115,6 +117,53 @@ describe("WRITE-PROD-1A command-center route", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("accepts a reviewed external version through a separate token-bound action", async () => {
+    mutationMocks.acceptExternalCanonicalMatterBaseline.mockResolvedValue({
+      code: "EXTERNAL_BASELINE_ACCEPTED",
+      transactionId: "tx-external",
+      revisionId: "revision-external",
+      readToken: NEXT_TOKEN,
+    });
+
+    const response = await PUT(jsonRequest("PUT", {
+      clientFolder: "TEST",
+      matterFolder: "SDJ_TEST",
+      expectedReadToken: NEXT_TOKEN,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mutationMocks.acceptExternalCanonicalMatterBaseline).toHaveBeenCalledWith(
+      matter,
+      NEXT_TOKEN,
+    );
+    expect(await response.json()).toMatchObject({
+      code: "EXTERNAL_BASELINE_ACCEPTED",
+      baselineState: "CURRENT",
+      acceptedRevisionId: "revision-external",
+    });
+  });
+
+  it("rejects stale external review acceptance with 409 and no fallback onboarding", async () => {
+    mutationMocks.acceptExternalCanonicalMatterBaseline.mockResolvedValue({
+      code: "CONFLICT",
+      transactionId: "tx-external",
+      observedReadToken: TOKEN,
+      detail: "mismatch",
+    });
+
+    const response = await PUT(jsonRequest("PUT", {
+      clientFolder: "TEST",
+      matterFolder: "SDJ_TEST",
+      expectedReadToken: NEXT_TOKEN,
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: "CONFLICT",
+      baselineState: "EXTERNAL_BASELINE_REVIEW_REQUIRED",
+    });
   });
 
   it("requires field, exact token and accepted revision for mutation", () => {

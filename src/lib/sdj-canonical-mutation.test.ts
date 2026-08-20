@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedActiveMatter } from "@/lib/sdj-matters";
@@ -10,6 +10,7 @@ vi.mock("@/lib/sdj-workspace", () => ({
 }));
 
 import {
+  acceptExternalCanonicalMatterBaseline,
   acceptCanonicalMatterBaseline,
   mutateCanonicalMatter,
   readCanonicalMatterState,
@@ -171,6 +172,99 @@ describe("WRITE-PROD-1A canonical mutation adapter", () => {
 
     expect(result.code).toBe("CONFLICT");
     expect(await readFile(commandCenterPath)).toEqual(manualV2);
+  });
+
+  it("closes accepted V1 -> manual V2 -> stale conflict -> reviewed external baseline -> next mutation", async () => {
+    const { initial, result: baseline } = await acceptCurrentBaseline();
+    if (!("revisionId" in baseline)) throw new Error("Missing accepted revision");
+    const manualV2 = Buffer.from(
+      V1.toString("utf8").replace("Pregled ugovora", "Manual V2 reviewed"),
+      "utf8",
+    );
+    await writeFile(commandCenterPath, manualV2);
+
+    const stale = await mutateCanonicalMatter(matter, {
+      field: "nextStep",
+      value: "Stale editor value",
+      expectedReadToken: initial.readToken,
+      acceptedRevisionId: baseline.revisionId,
+    });
+    expect(stale.code).toBe("CONFLICT");
+    expect(await readFile(commandCenterPath)).toEqual(manualV2);
+
+    const reviewed = await readCanonicalMatterState(matter);
+    expect(reviewed.baselineState).toBe("EXTERNAL_BASELINE_REVIEW_REQUIRED");
+    const external = await acceptExternalCanonicalMatterBaseline(
+      matter,
+      reviewed.readToken,
+    );
+    expect(external.code).toBe("EXTERNAL_BASELINE_ACCEPTED");
+    if (!("revisionId" in external)) throw new Error("Missing external revision");
+    expect(await readFile(commandCenterPath)).toEqual(manualV2);
+
+    const next = await mutateCanonicalMatter(matter, {
+      field: "nextStep",
+      value: "Continued after external review",
+      expectedReadToken: external.readToken,
+      acceptedRevisionId: external.revisionId,
+    });
+    expect(next.code).toBe("CANONICAL_SUCCESS");
+    expect(await readFile(commandCenterPath, "utf8")).toContain(
+      "Sledeći korak: Continued after external review\r\n",
+    );
+
+    const evidenceFiles = await readdir(
+      path.join(matter.matterPath, "00 CONTROL", "vla", "objects"),
+      { recursive: true },
+    );
+    const externalRevision = evidenceFiles.find(
+      (name) => typeof name === "string" && name.endsWith(`${external.revisionId}.json`),
+    );
+    expect(externalRevision).toBeDefined();
+    const stored = JSON.parse(await readFile(
+      path.join(matter.matterPath, "00 CONTROL", "vla", "objects", externalRevision as string),
+      "utf8",
+    )) as { envelope: { payload: { state: string }; references: Array<{ referenceType: string; targetRevisionId: string }> } };
+    expect(stored.envelope.payload.state).toBe("EXTERNAL_BASELINE_ACCEPTED");
+    expect(stored.envelope.references).toContainEqual(expect.objectContaining({
+      referenceType: "PREVIOUS_MATTER_CONTROL_REVISION",
+      targetRevisionId: baseline.revisionId,
+    }));
+  });
+
+  it("stores each matter's evidence locally and never creates workspace-root 00 CONTROL", async () => {
+    const secondMatterPath = path.join(
+      workspaceRoot,
+      "01 KLIJENTI",
+      "TEST_CLIENT",
+      "SDJ_2026-08-20_TEST_CLIENT_SECOND",
+    );
+    const secondControlPath = path.join(secondMatterPath, "00 CONTROL");
+    await mkdir(secondControlPath, { recursive: true });
+    await writeFile(path.join(secondControlPath, "command-center.md"), V1);
+    const secondMatter: ResolvedActiveMatter = {
+      ...matter,
+      matterFolder: "SDJ_2026-08-20_TEST_CLIENT_SECOND",
+      matterPath: secondMatterPath,
+      controlPath: secondControlPath,
+      ulazPath: path.join(secondMatterPath, "01 ULAZ"),
+      radnoPath: path.join(secondMatterPath, "02 RADNO"),
+      finalnoPath: path.join(secondMatterPath, "03 FINALNO"),
+      aiPath: path.join(secondMatterPath, "04 AI"),
+    };
+
+    const firstState = await readCanonicalMatterState(matter);
+    const secondState = await readCanonicalMatterState(secondMatter);
+    expect((await acceptCanonicalMatterBaseline(matter, firstState.readToken)).code).toBe(
+      "BASELINE_ACCEPTED",
+    );
+    expect((await acceptCanonicalMatterBaseline(secondMatter, secondState.readToken)).code).toBe(
+      "BASELINE_ACCEPTED",
+    );
+
+    await expect(access(path.join(matter.matterPath, "00 CONTROL", "vla", "objects"))).resolves.toBeUndefined();
+    await expect(access(path.join(secondMatterPath, "00 CONTROL", "vla", "objects"))).resolves.toBeUndefined();
+    await expect(access(path.join(workspaceRoot, "00 CONTROL"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("allows one same-target writer and rejects the stale concurrent writer", async () => {

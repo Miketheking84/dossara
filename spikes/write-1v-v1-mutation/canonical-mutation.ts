@@ -326,18 +326,18 @@ function envelope(
   };
 }
 
-function evidenceRoot(workspaceRoot: string): string {
-  return path.join(workspaceRoot, "00 CONTROL", "vla", "objects");
+function evidenceRoot(evidenceStorageRoot: string): string {
+  return path.join(evidenceStorageRoot, "00 CONTROL", "vla", "objects");
 }
 
-function evidencePath(workspaceRoot: string, value: Write1eEnvelope): string {
-  return path.join(evidenceRoot(workspaceRoot), value.objectType, encodeURIComponent(value.objectId), "revisions", `${encodeURIComponent(value.revisionId)}.json`);
+function evidencePath(evidenceStorageRoot: string, value: Write1eEnvelope): string {
+  return path.join(evidenceRoot(evidenceStorageRoot), value.objectType, encodeURIComponent(value.objectId), "revisions", `${encodeURIComponent(value.revisionId)}.json`);
 }
 
-async function writeDurableEnvelope(workspaceRoot: string, value: Write1eEnvelope): Promise<string> {
+async function writeDurableEnvelope(evidenceStorageRoot: string, value: Write1eEnvelope): Promise<string> {
   const findings = validateEnvelope(value, WRITE1E_REGISTRY);
   if (findings.length > 0) throw new Write1eError("IO_FAILED", findings.map((item) => `${item.path}:${item.code}`).join(", "));
-  const filePath = evidencePath(workspaceRoot, value);
+  const filePath = evidencePath(evidenceStorageRoot, value);
   await mkdir(path.dirname(filePath), { recursive: true });
   const digest = sha256(canonicalJson(value));
   const bytes = canonicalJson({ envelope: value, integrity: { algorithm: "sha256", digest } } satisfies StoredEnvelope);
@@ -351,8 +351,8 @@ async function writeDurableEnvelope(workspaceRoot: string, value: Write1eEnvelop
   return filePath;
 }
 
-async function readEvidence(workspaceRoot: string): Promise<Write1eEnvelope[]> {
-  const root = evidenceRoot(workspaceRoot);
+async function readEvidence(evidenceStorageRoot: string): Promise<Write1eEnvelope[]> {
+  const root = evidenceRoot(evidenceStorageRoot);
   const values: Write1eEnvelope[] = [];
   async function visit(directory: string): Promise<void> {
     let entries;
@@ -380,17 +380,36 @@ async function readEvidence(workspaceRoot: string): Promise<Write1eEnvelope[]> {
   return values;
 }
 
-export async function currentMatterControl(workspaceRoot: string, matterId: string, canonicalRelativePath: string): Promise<CurrentMatterControl | undefined> {
-  const receipts = (await readEvidence(workspaceRoot)).filter((value) => {
+export async function currentMatterControl(evidenceStorageRoot: string, matterId: string, canonicalRelativePath: string): Promise<CurrentMatterControl | undefined> {
+  const receipts = (await readEvidence(evidenceStorageRoot)).filter((value) => {
     if (value.objectType !== "MATTER_CONTROL_MUTATION_RECEIPT" || value.matterId !== matterId) return false;
     const payload = value.payload as ReceiptPayload;
     return payload.canonicalRelativePath === canonicalRelativePath;
   });
   receipts.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt) || left.revisionId.localeCompare(right.revisionId));
-  const latest = receipts.at(-1);
+  const supersededRevisionIds = new Set(
+    receipts
+      .map((receipt) => (receipt.payload as ReceiptPayload).previousRevisionId)
+      .filter((revisionId): revisionId is string => revisionId !== null),
+  );
+  const tips = receipts.filter(
+    (receipt) => !supersededRevisionIds.has(
+      (receipt.payload as ReceiptPayload).currentRevisionId,
+    ),
+  );
+  const latest = (tips.length === 1 ? tips : receipts).at(-1);
   if (!latest) return undefined;
   const payload = latest.payload as ReceiptPayload;
   return { revisionId: payload.currentRevisionId, readToken: payload.resultingVerifiedReadToken, receiptRevisionId: latest.revisionId };
+}
+
+function requestEvidenceStorageRoot(request: BaselineRequest | MutationRequest): string {
+  const workspaceRoot = path.resolve(request.workspaceRoot);
+  const storageRoot = path.resolve(request.evidenceStorageRoot ?? request.workspaceRoot);
+  if (!containsPath(workspaceRoot, storageRoot)) {
+    throw new Write1eError("VALIDATION_FAILED", "Evidence storage root must stay inside the workspace");
+  }
+  return storageRoot;
 }
 
 async function withSingleWriter<T>(key: string, action: () => Promise<T>): Promise<T> {
@@ -410,7 +429,7 @@ async function withSingleWriter<T>(key: string, action: () => Promise<T>): Promi
 
 async function recordOutcome(request: MutationRequest, code: OutcomePayload["code"], detail: string, observedReadToken?: string): Promise<void> {
   const payload: OutcomePayload = { state: "TERMINAL", transactionId: request.transactionId, code, canonicalRelativePath: request.canonicalRelativePath, observedReadToken, detail };
-  await writeDurableEnvelope(request.workspaceRoot, envelope(
+  await writeDurableEnvelope(requestEvidenceStorageRoot(request), envelope(
     "MATTER_CONTROL_MUTATION_OUTCOME", request.transactionId, `${request.transactionId}-outcome`, request.matterId,
     request.recordedAt, request.actor, payload,
     [{ referenceType: "MUTATION_ATTEMPT", targetObjectType: "MATTER_CONTROL_MUTATION_ATTEMPT", targetObjectId: request.transactionId, targetRevisionId: `${request.transactionId}-attempt`, matterId: request.matterId, required: true }],
@@ -423,6 +442,7 @@ export async function acceptMatterControlBaseline(request: BaselineRequest): Pro
     throw new Write1eError("VALIDATION_FAILED", "expectedReadToken is malformed");
   }
   const target = await resolveCanonicalTarget(request.workspaceRoot, request.canonicalRelativePath);
+  const evidenceStorageRoot = requestEvidenceStorageRoot(request);
   return withSingleWriter(target.toLowerCase(), async () => {
     const targetGuard = await acquireWindowsTargetGuard(path.dirname(target));
     try {
@@ -435,13 +455,13 @@ export async function acceptMatterControlBaseline(request: BaselineRequest): Pro
           code: "CONFLICT",
           transactionId: request.transactionId,
           observedReadToken: readToken,
-          currentRevisionId: (await currentMatterControl(request.workspaceRoot, request.matterId, request.canonicalRelativePath))?.revisionId,
+          currentRevisionId: (await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath))?.revisionId,
           detail: "Exact-byte read token mismatch during baseline acceptance",
         };
       }
 
       const existing = await currentMatterControl(
-        request.workspaceRoot,
+        evidenceStorageRoot,
         request.matterId,
         request.canonicalRelativePath,
       );
@@ -468,14 +488,14 @@ export async function acceptMatterControlBaseline(request: BaselineRequest): Pro
         canonicalRelativePath: request.canonicalRelativePath, previousReadToken: null, resultingReadToken: readToken,
         changedFields: [], contentEncoding: "base64", exactContentBase64: bytes.toString("base64"), source: request.source,
       };
-      await writeDurableEnvelope(request.workspaceRoot, envelope("MATTER_CONTROL", request.matterId, request.revisionId, request.matterId, request.recordedAt, request.actor, revisionPayload));
+      await writeDurableEnvelope(evidenceStorageRoot, envelope("MATTER_CONTROL", request.matterId, request.revisionId, request.matterId, request.recordedAt, request.actor, revisionPayload));
       const receiptPayload: ReceiptPayload = {
         state: "BASELINE_ACCEPTED", transactionId: request.transactionId, matterId: request.matterId,
         canonicalRelativePath: request.canonicalRelativePath, previousRevisionId: null, currentRevisionId: request.revisionId,
         previousReadToken: null, resultingVerifiedReadToken: readToken, changedFields: [], publicationVerified: true,
         derivedState: "VALID", source: request.source,
       };
-      await writeDurableEnvelope(request.workspaceRoot, envelope(
+      await writeDurableEnvelope(evidenceStorageRoot, envelope(
         "MATTER_CONTROL_MUTATION_RECEIPT", request.transactionId, `${request.transactionId}-receipt`, request.matterId,
         request.recordedAt, request.actor, receiptPayload,
         [{ referenceType: "PREPARED_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: request.revisionId, matterId: request.matterId, required: true }],
@@ -492,18 +512,102 @@ export async function acceptMatterControlBaseline(request: BaselineRequest): Pro
   });
 }
 
+export async function acceptExternalMatterControlBaseline(request: BaselineRequest): Promise<BaselineAcceptanceResult> {
+  assertCanonicalTimestamp(request.recordedAt);
+  if (!/^sha256:[0-9a-f]{64}$/u.test(request.expectedReadToken)) {
+    throw new Write1eError("VALIDATION_FAILED", "expectedReadToken is malformed");
+  }
+  const target = await resolveCanonicalTarget(request.workspaceRoot, request.canonicalRelativePath);
+  const evidenceStorageRoot = requestEvidenceStorageRoot(request);
+  return withSingleWriter(target.toLowerCase(), async () => {
+    const targetGuard = await acquireWindowsTargetGuard(path.dirname(target));
+    try {
+      await targetGuard.verify();
+      const bytes = await readFile(target);
+      strictUtf8(bytes);
+      const readToken = exactReadToken(bytes);
+      const existing = await currentMatterControl(
+        evidenceStorageRoot,
+        request.matterId,
+        request.canonicalRelativePath,
+      );
+      if (readToken !== request.expectedReadToken) {
+        return {
+          code: "CONFLICT",
+          transactionId: request.transactionId,
+          observedReadToken: readToken,
+          currentRevisionId: existing?.revisionId,
+          detail: "Exact-byte read token mismatch during external baseline acceptance",
+        };
+      }
+      if (!existing) {
+        return {
+          code: "EXTERNAL_BASELINE_REVIEW_REQUIRED",
+          transactionId: request.transactionId,
+          observedReadToken: readToken,
+          detail: "External baseline acceptance requires a previous accepted revision",
+        };
+      }
+      if (existing.readToken === readToken) {
+        return {
+          code: "BASELINE_ALREADY_ACCEPTED",
+          transactionId: request.transactionId,
+          revisionId: existing.revisionId,
+          readToken,
+        };
+      }
+
+      const revisionPayload: MatterControlPayload = {
+        state: "EXTERNAL_BASELINE_ACCEPTED", matterId: request.matterId, transactionId: request.transactionId,
+        canonicalRelativePath: request.canonicalRelativePath, previousReadToken: existing.readToken,
+        resultingReadToken: readToken, changedFields: [], contentEncoding: "base64",
+        exactContentBase64: bytes.toString("base64"), source: request.source,
+      };
+      await writeDurableEnvelope(evidenceStorageRoot, envelope(
+        "MATTER_CONTROL", request.matterId, request.revisionId, request.matterId,
+        request.recordedAt, request.actor, revisionPayload,
+        [{ referenceType: "PREVIOUS_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: existing.revisionId, matterId: request.matterId, required: true }],
+      ));
+      const receiptPayload: ReceiptPayload = {
+        state: "EXTERNAL_BASELINE_ACCEPTED", transactionId: request.transactionId, matterId: request.matterId,
+        canonicalRelativePath: request.canonicalRelativePath, previousRevisionId: existing.revisionId,
+        currentRevisionId: request.revisionId, previousReadToken: existing.readToken,
+        resultingVerifiedReadToken: readToken, changedFields: [], publicationVerified: true,
+        derivedState: "VALID", source: request.source,
+      };
+      await writeDurableEnvelope(evidenceStorageRoot, envelope(
+        "MATTER_CONTROL_MUTATION_RECEIPT", request.transactionId, `${request.transactionId}-receipt`, request.matterId,
+        request.recordedAt, request.actor, receiptPayload,
+        [
+          { referenceType: "PREVIOUS_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: existing.revisionId, matterId: request.matterId, required: true },
+          { referenceType: "PREPARED_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: request.revisionId, matterId: request.matterId, required: true },
+        ],
+      ));
+      return {
+        code: "EXTERNAL_BASELINE_ACCEPTED",
+        transactionId: request.transactionId,
+        revisionId: request.revisionId,
+        readToken,
+      };
+    } finally {
+      await targetGuard.close();
+    }
+  });
+}
+
 export async function mutateMatterControl(request: MutationRequest, options: MutationHarnessOptions = {}): Promise<MutationResult> {
   assertCanonicalTimestamp(request.recordedAt);
   validateMutations(request.mutations);
   if (!/^sha256:[0-9a-f]{64}$/u.test(request.expectedReadToken)) throw new Write1eError("VALIDATION_FAILED", "expectedReadToken is malformed");
   const target = await resolveCanonicalTarget(request.workspaceRoot, request.canonicalRelativePath);
+  const evidenceStorageRoot = requestEvidenceStorageRoot(request);
   return withSingleWriter(target.toLowerCase(), async () => {
     const attemptPayload: AttemptPayload = {
       state: "ATTEMPTED", transactionId: request.transactionId, matterId: request.matterId,
       canonicalRelativePath: request.canonicalRelativePath, expectedReadToken: request.expectedReadToken,
       acceptedRevisionId: request.acceptedRevisionId, requestedMutations: request.mutations, source: request.source,
     };
-    await writeDurableEnvelope(request.workspaceRoot, envelope(
+    await writeDurableEnvelope(evidenceStorageRoot, envelope(
       "MATTER_CONTROL_MUTATION_ATTEMPT", request.transactionId, `${request.transactionId}-attempt`, request.matterId,
       request.recordedAt, request.actor, attemptPayload,
     ));
@@ -516,7 +620,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
     const preliminaryToken = exactReadToken(preliminaryBytes);
     if (preliminaryToken !== request.expectedReadToken) {
       await recordOutcome(request, "CONFLICT", "Exact-byte read token mismatch", preliminaryToken);
-      return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: preliminaryToken, currentRevisionId: (await currentMatterControl(request.workspaceRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
+      return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: preliminaryToken, currentRevisionId: (await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
     }
 
     const targetGuard = await acquireWindowsTargetGuard(path.dirname(target));
@@ -526,9 +630,9 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
     const observedToken = exactReadToken(currentBytes);
     if (observedToken !== request.expectedReadToken) {
       await recordOutcome(request, "CONFLICT", "Exact-byte read token mismatch", observedToken);
-      return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: (await currentMatterControl(request.workspaceRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
+      return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: (await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
     }
-    const accepted = await currentMatterControl(request.workspaceRoot, request.matterId, request.canonicalRelativePath);
+    const accepted = await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath);
     if (!accepted || accepted.revisionId !== request.acceptedRevisionId || accepted.readToken !== observedToken) {
       await recordOutcome(request, "EXTERNAL_BASELINE_REVIEW_REQUIRED", "Current bytes are not the supplied accepted revision", observedToken);
       return { code: "EXTERNAL_BASELINE_REVIEW_REQUIRED", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: accepted?.revisionId };
@@ -549,7 +653,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
       changedFields: request.mutations.map((item) => item.field), contentEncoding: "base64",
       exactContentBase64: proposed.toString("base64"), source: request.source,
     };
-    await writeDurableEnvelope(request.workspaceRoot, envelope(
+    await writeDurableEnvelope(evidenceStorageRoot, envelope(
       "MATTER_CONTROL", request.matterId, request.resultingRevisionId, request.matterId,
       request.recordedAt, request.actor, revisionPayload,
       [{ referenceType: "PREVIOUS_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: accepted.revisionId, matterId: request.matterId, required: true }],
@@ -591,7 +695,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
         publicationVerified: true, derivedState: "PENDING",
         source: request.source,
       };
-      await writeDurableEnvelope(request.workspaceRoot, envelope(
+      await writeDurableEnvelope(evidenceStorageRoot, envelope(
         "MATTER_CONTROL_MUTATION_RECEIPT", request.transactionId, `${request.transactionId}-receipt`, request.matterId,
         request.recordedAt, request.actor, receiptPayload,
         [
@@ -625,11 +729,16 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
   });
 }
 
-export async function inspectMatterControlRecovery(workspaceRoot: string, matterId: string, canonicalRelativePath: string): Promise<RecoveryResult> {
+export async function inspectMatterControlRecovery(
+  workspaceRoot: string,
+  matterId: string,
+  canonicalRelativePath: string,
+  evidenceStorageRoot = workspaceRoot,
+): Promise<RecoveryResult> {
   const target = await resolveCanonicalTarget(workspaceRoot, canonicalRelativePath);
   const canonicalReadToken = exactReadToken(await readFile(target));
-  const evidence = await readEvidence(workspaceRoot);
-  const current = await currentMatterControl(workspaceRoot, matterId, canonicalRelativePath);
+  const evidence = await readEvidence(evidenceStorageRoot);
+  const current = await currentMatterControl(evidenceStorageRoot, matterId, canonicalRelativePath);
   const prepared = evidence.filter((item) => item.objectType === "MATTER_CONTROL" && item.matterId === matterId && (item.payload as MatterControlPayload).state === "PREPARED");
   const receiptedRevisionIds = new Set(evidence
     .filter((item) => item.objectType === "MATTER_CONTROL_MUTATION_RECEIPT" && item.matterId === matterId)

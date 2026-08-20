@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { MutableMatterField } from "../../../../../spikes/write-1v-v1-mutation/contracts";
 import {
+  acceptExternalCanonicalMatterBaseline,
   acceptCanonicalMatterBaseline,
   mutateCanonicalMatter,
   readCanonicalMatterState,
@@ -166,6 +167,47 @@ export async function POST(request: Request) {
     if (error instanceof MatterResolutionError) return resolutionFailure(error);
     return NextResponse.json(
       { code: "IO_FAILED", error: "Baseline trenutno nije moguće prihvatiti." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  const input = parseBaselineRequest(await jsonBody(request));
+  if (!input) return invalidRequest();
+
+  try {
+    const matter = await resolveMatter(input.clientFolder, input.matterFolder);
+    const result = await acceptExternalCanonicalMatterBaseline(
+      matter,
+      input.expectedReadToken,
+    );
+    if (
+      result.code === "EXTERNAL_BASELINE_ACCEPTED" ||
+      result.code === "BASELINE_ALREADY_ACCEPTED"
+    ) {
+      return NextResponse.json({
+        ...result,
+        baselineState: "CURRENT",
+        acceptedRevisionId: result.revisionId,
+      });
+    }
+    return NextResponse.json(
+      {
+        ...result,
+        baselineState: result.code === "CONFLICT"
+          ? "EXTERNAL_BASELINE_REVIEW_REQUIRED"
+          : "BASELINE_REQUIRED",
+        error: result.code === "CONFLICT"
+          ? "Fajl je promijenjen nakon pregleda. Učitajte ga ponovo prije prihvatanja."
+          : "Eksterna baseline revizija zahtijeva prethodnu accepted reviziju.",
+      },
+      { status: 409 },
+    );
+  } catch (error) {
+    if (error instanceof MatterResolutionError) return resolutionFailure(error);
+    return NextResponse.json(
+      { code: "IO_FAILED", error: "Eksternu baseline reviziju trenutno nije moguće prihvatiti." },
       { status: 500 },
     );
   }
