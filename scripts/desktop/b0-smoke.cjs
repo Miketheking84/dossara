@@ -99,9 +99,9 @@ for (const [pattern, description] of [
   [/sandbox\s*:\s*false/, "sandbox must not be false"],
   [/shell\.openExternal/, "external URL opening is forbidden"],
   [/<webview\b/i, "webview is forbidden"],
-  [/\bchild_process\b/, "child processes are forbidden"],
-  [/\b(?:readFile|writeFile|appendFile|mkdir|rename|rm|unlink)\b/, "filesystem access is forbidden in desktop source"],
-  [/\bhttps?:\/\//i, "HTTP URLs are forbidden in desktop source"],
+
+  [/\b(?:writeFile|appendFile|rename|rm|unlink)\b/, "legal filesystem writes are forbidden in shell source"],
+
   [/from\s+["'](?:\.\.\/)+src\//, "desktop source must not import src"],
 ]) {
   if (pattern.test(desktopSource)) {
@@ -137,4 +137,17 @@ if (/unsafe-eval|unsafe-inline/.test(rendererHtml)) {
   fail("packaged CSP contains an unsafe directive");
 }
 
-console.log("B0 static smoke checks passed.");
+const runtimeSource = read("desktop/main/next-runtime.ts");
+const policySource = read("desktop/main/security/next-runtime-policy.ts");
+requireMatch(mainSource, /process\.env\.DOSSARA_ALPHA === "1"/, "Alpha must be opt-in");
+requireMatch(mainSource, /else createMainWindow\(\)/, "B0 rollback path is missing");
+requireMatch(runtimeSource, /127\.0\.0\.1:3100/, "Alpha exact loopback origin is missing");
+requireMatch(runtimeSource, /assertOwnedListener/, "Alpha listener ownership check is missing");
+requireMatch(policySource, /setPermissionRequestHandler/, "Alpha permission deny policy is missing");
+requireMatch(policySource, /documentNavigation/, "restricted document policy is missing");
+for (const source of [runtimeSource, policySource]) {
+  if (/from\s+["'](?:\.\.\/)+src\//.test(source) || /(?:mutateMatter|reviewNextStep|registerAlphaEvidence|applyReviewedNextStep)/.test(source)) fail("Shell helpers must not contain business logic");
+}
+const b0Source = requiredFiles.filter(file => file.startsWith("desktop/") && file !== "desktop/main/index.ts").map(read).join("\n");
+if (/\bchild_process\b|\bhttps?:\/\/|\b(?:readFile|writeFile|appendFile|mkdir|rename|rm|unlink)\b/.test(b0Source)) fail("B0 renderer/preload/IPC must retain their original process/filesystem isolation");
+console.log("B0 and local Alpha boundary smoke checks passed.");
