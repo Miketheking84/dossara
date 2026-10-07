@@ -711,3 +711,16 @@ describe("WRITE-1V Windows identity, sharing and namespace qualification", () =>
     // PASS means the ACA-1/WAC-1A negative capability remains reproducible and explicitly unsupported.
   });
 });
+
+
+describe("bounded transaction replay", () => {
+  it("returns the same receipt without publishing twice and refuses changed review identity", async () => {
+    const fixture = await workspace(); const tx = request(fixture, `alpha-replay-${randomUUID()}`);
+    const first = await mutateMatterControl(tx, { replay: true });
+    const files = await evidenceJsonFiles(fixture.root); const before = await readFile(fixture.target);
+    const second = await mutateMatterControl(tx, { replay: true });
+    expect(second.code).toBe("CANONICAL_SUCCESS"); expect(second.currentRevisionId).toBe(first.currentRevisionId);
+    expect(await evidenceJsonFiles(fixture.root)).toEqual(files); expect(await readFile(fixture.target)).toEqual(before);
+    await expect(mutateMatterControl({ ...tx, actor: "different lawyer" }, { replay: true })).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+  });
+});

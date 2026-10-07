@@ -67,6 +67,8 @@ interface Faults {
 
 export interface MutationHarnessOptions {
   faults?: Faults;
+  replay?: boolean;
+  recoverPublished?: boolean;
   updateDerived?: (result: { matterId: string; revisionId: string; readToken: string }) => Promise<void>;
 }
 
@@ -334,13 +336,21 @@ function evidencePath(evidenceStorageRoot: string, value: Write1eEnvelope): stri
   return path.join(evidenceRoot(evidenceStorageRoot), value.objectType, encodeURIComponent(value.objectId), "revisions", `${encodeURIComponent(value.revisionId)}.json`);
 }
 
-async function writeDurableEnvelope(evidenceStorageRoot: string, value: Write1eEnvelope): Promise<string> {
+async function writeDurableEnvelope(evidenceStorageRoot: string, value: Write1eEnvelope, replay = false): Promise<string> {
   const findings = validateEnvelope(value, WRITE1E_REGISTRY);
   if (findings.length > 0) throw new Write1eError("IO_FAILED", findings.map((item) => `${item.path}:${item.code}`).join(", "));
   const filePath = evidencePath(evidenceStorageRoot, value);
   await mkdir(path.dirname(filePath), { recursive: true });
   const digest = sha256(canonicalJson(value));
   const bytes = canonicalJson({ envelope: value, integrity: { algorithm: "sha256", digest } } satisfies StoredEnvelope);
+  if (replay) {
+    try {
+      if ((await readFile(filePath, "utf8")) !== bytes) throw new Write1eError("RECOVERY_REQUIRED", "Immutable transaction identity reused with different bytes");
+      return filePath;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
   const handle = await open(filePath, "wx");
   try {
     await handle.writeFile(bytes, "utf8");
@@ -602,6 +612,70 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
   const target = await resolveCanonicalTarget(request.workspaceRoot, request.canonicalRelativePath);
   const evidenceStorageRoot = requestEvidenceStorageRoot(request);
   return withSingleWriter(target.toLowerCase(), async () => {
+    const recordReplayOutcome = async (...args: Parameters<typeof recordOutcome>) => {
+      if (!options.replay) return recordOutcome(...args);
+      const existing = (await readEvidence(evidenceStorageRoot)).some((item) => item.objectType === "MATTER_CONTROL_MUTATION_OUTCOME" && item.objectId === request.transactionId);
+      if (!existing) await recordOutcome(...args);
+    };
+    if (options.replay) {
+      const evidence = await readEvidence(evidenceStorageRoot);
+      const attempt = evidence.find((item) => item.objectType === "MATTER_CONTROL_MUTATION_ATTEMPT" && item.objectId === request.transactionId);
+      const prepared = evidence.find((item) => item.objectType === "MATTER_CONTROL" && item.revisionId === request.resultingRevisionId);
+      const receipt = evidence.find((item) => item.objectType === "MATTER_CONTROL_MUTATION_RECEIPT" && item.objectId === request.transactionId);
+      if (attempt) {
+        const payload = attempt.payload as AttemptPayload;
+        if (attempt.matterId !== request.matterId || attempt.createdBy !== request.actor || attempt.recordedAt !== request.recordedAt ||
+            payload.canonicalRelativePath !== request.canonicalRelativePath || payload.expectedReadToken !== request.expectedReadToken ||
+            payload.acceptedRevisionId !== request.acceptedRevisionId || payload.source !== request.source ||
+            canonicalJson(payload.requestedMutations) !== canonicalJson(request.mutations)) {
+          throw new Write1eError("VALIDATION_FAILED", "Transaction cannot be reused for a different review");
+        }
+      }
+      if (receipt) {
+        const payload = receipt.payload as ReceiptPayload;
+        if (!attempt || !prepared || payload.currentRevisionId !== request.resultingRevisionId ||
+            payload.previousRevisionId !== request.acceptedRevisionId || payload.previousReadToken !== request.expectedReadToken ||
+            payload.resultingVerifiedReadToken !== (prepared.payload as MatterControlPayload).resultingReadToken) {
+          throw new Write1eError("RECOVERY_REQUIRED", "Incomplete replay provenance");
+        }
+        return { code: "CANONICAL_SUCCESS", transactionId: request.transactionId, previousReadToken: payload.previousReadToken!,
+          resultingReadToken: payload.resultingVerifiedReadToken, currentRevisionId: payload.currentRevisionId, preparedRevisionId: payload.currentRevisionId };
+      }
+      if (prepared) {
+        const payload = prepared.payload as MatterControlPayload;
+        if (!attempt || payload.transactionId !== request.transactionId || payload.previousReadToken !== request.expectedReadToken ||
+            prepared.matterId !== request.matterId || payload.canonicalRelativePath !== request.canonicalRelativePath) {
+          throw new Write1eError("RECOVERY_REQUIRED", "Prepared transaction mismatch");
+        }
+        const token = exactReadToken(await readFile(target));
+        if (token !== request.expectedReadToken) {
+          if (!options.recoverPublished || token !== payload.resultingReadToken) {
+            return { code: "RECOVERY_REQUIRED", transactionId: request.transactionId, resultingReadToken: token };
+          }
+          const guard = await acquireWindowsTargetGuard(path.dirname(target));
+          try {
+            await guard.verify();
+            const current = await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath);
+            if (!current || current.revisionId !== request.acceptedRevisionId || current.readToken !== request.expectedReadToken ||
+                exactReadToken(Buffer.from(payload.exactContentBase64, "base64")) !== token || exactReadToken(await readFile(target)) !== token) {
+              throw new Write1eError("RECOVERY_REQUIRED", "Published recovery no longer matches its reviewed base/result");
+            }
+            await writeDurableEnvelope(evidenceStorageRoot, envelope(
+              "MATTER_CONTROL_MUTATION_RECEIPT", request.transactionId, `${request.transactionId}-receipt`, request.matterId,
+              request.recordedAt, request.actor, { state: "SUCCESS", transactionId: request.transactionId, matterId: request.matterId,
+                canonicalRelativePath: request.canonicalRelativePath, previousRevisionId: request.acceptedRevisionId,
+                currentRevisionId: request.resultingRevisionId, previousReadToken: request.expectedReadToken,
+                resultingVerifiedReadToken: token, changedFields: request.mutations.map((item) => item.field),
+                publicationVerified: true, derivedState: "PENDING", source: request.source } satisfies ReceiptPayload,
+              [ { referenceType: "MUTATION_ATTEMPT", targetObjectType: "MATTER_CONTROL_MUTATION_ATTEMPT", targetObjectId: request.transactionId, targetRevisionId: `${request.transactionId}-attempt`, matterId: request.matterId, required: true },
+                { referenceType: "PREPARED_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: request.resultingRevisionId, matterId: request.matterId, required: true } ],
+            ), true);
+            return { code: "CANONICAL_SUCCESS", transactionId: request.transactionId, previousReadToken: request.expectedReadToken,
+              resultingReadToken: token, currentRevisionId: request.resultingRevisionId, preparedRevisionId: request.resultingRevisionId };
+          } finally { await guard.close(); }
+        }
+      }
+    }
     const attemptPayload: AttemptPayload = {
       state: "ATTEMPTED", transactionId: request.transactionId, matterId: request.matterId,
       canonicalRelativePath: request.canonicalRelativePath, expectedReadToken: request.expectedReadToken,
@@ -610,7 +684,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
     await writeDurableEnvelope(evidenceStorageRoot, envelope(
       "MATTER_CONTROL_MUTATION_ATTEMPT", request.transactionId, `${request.transactionId}-attempt`, request.matterId,
       request.recordedAt, request.actor, attemptPayload,
-    ));
+    ), options.replay);
 
     // A writer queued behind a successful same-process mutation is already stale.
     // Reject it before starting another native guard; successful candidates are
@@ -619,7 +693,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
     strictUtf8(preliminaryBytes);
     const preliminaryToken = exactReadToken(preliminaryBytes);
     if (preliminaryToken !== request.expectedReadToken) {
-      await recordOutcome(request, "CONFLICT", "Exact-byte read token mismatch", preliminaryToken);
+      await recordReplayOutcome(request, "CONFLICT", "Exact-byte read token mismatch", preliminaryToken);
       return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: preliminaryToken, currentRevisionId: (await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
     }
 
@@ -629,12 +703,12 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
     strictUtf8(currentBytes);
     const observedToken = exactReadToken(currentBytes);
     if (observedToken !== request.expectedReadToken) {
-      await recordOutcome(request, "CONFLICT", "Exact-byte read token mismatch", observedToken);
+      await recordReplayOutcome(request, "CONFLICT", "Exact-byte read token mismatch", observedToken);
       return { code: "CONFLICT", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: (await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath))?.revisionId };
     }
     const accepted = await currentMatterControl(evidenceStorageRoot, request.matterId, request.canonicalRelativePath);
     if (!accepted || accepted.revisionId !== request.acceptedRevisionId || accepted.readToken !== observedToken) {
-      await recordOutcome(request, "EXTERNAL_BASELINE_REVIEW_REQUIRED", "Current bytes are not the supplied accepted revision", observedToken);
+      await recordReplayOutcome(request, "EXTERNAL_BASELINE_REVIEW_REQUIRED", "Current bytes are not the supplied accepted revision", observedToken);
       return { code: "EXTERNAL_BASELINE_REVIEW_REQUIRED", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: accepted?.revisionId };
     }
 
@@ -643,7 +717,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
       proposed = losslessTransform(currentBytes, request.mutations);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await recordOutcome(request, "VALIDATION_FAILED", detail, observedToken);
+      await recordReplayOutcome(request, "VALIDATION_FAILED", detail, observedToken);
       return { code: "VALIDATION_FAILED", transactionId: request.transactionId, previousReadToken: observedToken, currentRevisionId: accepted.revisionId, detail };
     }
     const proposedToken = exactReadToken(proposed);
@@ -657,7 +731,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
       "MATTER_CONTROL", request.matterId, request.resultingRevisionId, request.matterId,
       request.recordedAt, request.actor, revisionPayload,
       [{ referenceType: "PREVIOUS_MATTER_CONTROL_REVISION", targetObjectType: "MATTER_CONTROL", targetObjectId: request.matterId, targetRevisionId: accepted.revisionId, matterId: request.matterId, required: true }],
-    ));
+    ), options.replay);
 
     const unique = `${request.transactionId}-${randomUUID()}`;
     const temp = path.join(path.dirname(target), `.${path.basename(target)}.${unique}.write1v.tmp`);
@@ -707,10 +781,10 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
         if (options.faults?.failurePoint === "DERIVED_UPDATE") throw new Error("Injected derived update failure");
         await options.updateDerived?.({ matterId: request.matterId, revisionId: request.resultingRevisionId, readToken: proposedToken });
       } catch {
-        await recordOutcome(request, "CANONICAL_SUCCESS_DERIVED_REBUILD_REQUIRED", "Canonical receipt is current; derived state requires rebuild", proposedToken);
+        await recordReplayOutcome(request, "CANONICAL_SUCCESS_DERIVED_REBUILD_REQUIRED", "Canonical receipt is current; derived state requires rebuild", proposedToken);
         return { code: "CANONICAL_SUCCESS_DERIVED_REBUILD_REQUIRED", transactionId: request.transactionId, previousReadToken: observedToken, resultingReadToken: proposedToken, preparedRevisionId: request.resultingRevisionId, currentRevisionId: request.resultingRevisionId };
       }
-      await recordOutcome(request, "CANONICAL_SUCCESS", "Canonical receipt and derived update are complete", proposedToken);
+      if (!options.replay) await recordReplayOutcome(request, "CANONICAL_SUCCESS", "Canonical receipt and derived update are complete", proposedToken);
       return { code: "CANONICAL_SUCCESS", transactionId: request.transactionId, previousReadToken: observedToken, resultingReadToken: proposedToken, preparedRevisionId: request.resultingRevisionId, currentRevisionId: request.resultingRevisionId };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -718,7 +792,7 @@ export async function mutateMatterControl(request: MutationRequest, options: Mut
       let actualToken: string | undefined;
       try { actualToken = exactReadToken(await readFile(target)); } catch { code = "RECOVERY_REQUIRED"; }
       if (canonicalMayHaveChanged && actualToken !== observedToken) code = "RECOVERY_REQUIRED";
-      await recordOutcome(request, code, detail, actualToken);
+      await recordReplayOutcome(request, code, detail, actualToken);
       return { code, transactionId: request.transactionId, previousReadToken: observedToken, resultingReadToken: actualToken, preparedRevisionId: request.resultingRevisionId, currentRevisionId: accepted.revisionId, detail };
     } finally {
       await rm(temp, { force: true });

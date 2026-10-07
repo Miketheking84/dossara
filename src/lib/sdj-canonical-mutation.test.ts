@@ -10,6 +10,7 @@ vi.mock("@/lib/sdj-workspace", () => ({
 }));
 
 import {
+  applyReviewedNextStep,
   acceptExternalCanonicalMatterBaseline,
   acceptCanonicalMatterBaseline,
   mutateCanonicalMatter,
@@ -292,4 +293,14 @@ describe("WRITE-PROD-1A canonical mutation adapter", () => {
     const after = await readFile(commandCenterPath, "utf8");
     expect(after.includes("Sledeći korak: Writer one") || after.includes("Sledeći korak: Writer two")).toBe(true);
   });
+  it("passes durable review identity and attribution to the existing canonical boundary", async () => {
+    const { initial, result } = await acceptCurrentBaseline();
+    const review = { transactionId: "alpha-adapter-transaction", resultingRevisionId: "alpha-adapter-result",
+      acceptedRevisionId: result.revisionId, expectedReadToken: initial.readToken, value: "Reviewed nextStep",
+      actor: "LAWYER-1: Test lawyer", source: "ALPHA-NEXT-STEP/test/review", recordedAt: new Date().toISOString() };
+    const first = await applyReviewedNextStep(matter, review); const second = await applyReviewedNextStep(matter, review);
+    expect(first.code).toBe("CANONICAL_SUCCESS"); expect(second.currentRevisionId).toBe(first.currentRevisionId);
+    expect((await readCanonicalMatterState(matter)).values.nextStep).toBe("Reviewed nextStep");
+  });
+
 });

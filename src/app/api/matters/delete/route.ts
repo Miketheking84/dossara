@@ -1,3 +1,4 @@
+import { AlphaReviewError, withAlphaMatterGate } from "@/lib/sdj-next-step-review";
 import { rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
@@ -62,6 +63,8 @@ export async function POST(request: Request) {
       clientFolder,
       matterFolder,
     );
+    let movedMatterPath: string | undefined;
+    return await withAlphaMatterGate(resolvedMatter, async () => {
     const archiveRoot = await ensureSafeDirectoryForMutation(
       resolvedMatter.workspaceRoot,
       "05 ARHIVA",
@@ -86,6 +89,7 @@ export async function POST(request: Request) {
       if (await pathExists(destinationPath)) continue;
       try {
         await rename(resolvedMatter.matterPath, destinationPath);
+        movedMatterPath = destinationPath;
         return NextResponse.json({
           success: true,
           message: "Predmet je premješten u arhivu.",
@@ -101,7 +105,9 @@ export async function POST(request: Request) {
       { error: "Nije pronađen slobodan naziv u arhivi." },
       { status: 409 },
     );
+    }, { movedMatterPath: () => movedMatterPath });
   } catch (error) {
+    if (error instanceof AlphaReviewError) return NextResponse.json({ code: error.code, error: error.message }, { status: 409 });
     if (error instanceof MatterResolutionError) {
       return NextResponse.json(
         { error: "Klijent, predmet ili arhivska destinacija nisu bezbjedni." },

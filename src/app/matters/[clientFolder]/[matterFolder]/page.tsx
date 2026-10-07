@@ -10,6 +10,7 @@ import {
 import { listActiveMatterFileTree } from "@/lib/sdj-matter-files";
 import type { MatterWorkValues } from "@/lib/sdj-work-fields";
 import { MatterFileBrowser } from "./matter-file-browser";
+import { NextStepReviewPanel } from "./next-step-review-panel";
 import { MatterWorkEditor } from "./matter-work-editor";
 
 export const dynamic = "force-dynamic";
@@ -212,6 +213,7 @@ export default async function MatterCockpitPage({
               initialMatterType={metadata.matterType ?? ""}
               initialValues={initialWorkValues}
             />
+            <NextStepReviewPanel clientFolder={resolvedMatter.clientFolder} matterFolder={resolvedMatter.matterFolder} />
             <PresentMetadataSection
               title={t("legal")}
               description={t("legalDescription")}

@@ -163,3 +163,15 @@ export async function mutateCanonicalMatter(
     mutations: [{ field: input.field, value: input.value }],
   });
 }
+
+// Bounded Alpha review identity; ordinary manual editing retains its existing API.
+export async function applyReviewedNextStep(
+  matter: ResolvedActiveMatter,
+  input: { transactionId: string; resultingRevisionId: string; acceptedRevisionId: string; expectedReadToken: string;
+    value: string; actor: string; source: string; recordedAt: string },
+  options: import("../../spikes/write-1v-v1-mutation/canonical-mutation").MutationHarnessOptions = {},
+): Promise<MutationResult> {
+  const descriptor = canonicalDescriptor(matter);
+  return mutateMatterControl({ ...descriptor, ...input, mutations: [{ field: "nextStep", value: input.value }] },
+    { ...options, replay: true });
+}

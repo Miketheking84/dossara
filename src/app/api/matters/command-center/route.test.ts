@@ -1,3 +1,4 @@
+vi.mock("@/lib/sdj-next-step-review", () => ({ AlphaReviewError: class extends Error { constructor(readonly code: string, message: string) { super(message); } }, withAlphaMatterGate: vi.fn((_matter, action) => action()) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutationMocks = vi.hoisted(() => ({
@@ -262,4 +263,15 @@ describe("WRITE-PROD-1A command-center route", () => {
     expect(patchResponse.status).toBe(400);
     expect(mutationMocks.mutateCanonicalMatter).not.toHaveBeenCalled();
   });
+});
+
+
+it("blocks manual writes while Alpha recovery is unresolved", async () => {
+  vi.clearAllMocks();
+  matterMocks.resolveSafeMatterForMutation.mockResolvedValue(matter);
+  const { withAlphaMatterGate, AlphaReviewError } = await import("@/lib/sdj-next-step-review");
+  vi.mocked(withAlphaMatterGate).mockImplementationOnce(async () => { throw new AlphaReviewError("RECOVERY_REQUIRED", "pending Alpha apply"); });
+  const response = await PATCH(jsonRequest("PATCH", { clientFolder: "TEST", matterFolder: "SDJ_TEST", field: "nextStep", value: "manual", expectedReadToken: TOKEN, acceptedRevisionId: "r1" }));
+  expect(response.status).toBe(409);
+  expect(mutationMocks.mutateCanonicalMatter).not.toHaveBeenCalled();
 });

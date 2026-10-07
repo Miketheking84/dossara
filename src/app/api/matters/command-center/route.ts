@@ -1,3 +1,4 @@
+import { AlphaReviewError, withAlphaMatterGate } from "@/lib/sdj-next-step-review";
 import { NextResponse } from "next/server";
 import type { MutableMatterField } from "../../../../../spikes/write-1v-v1-mutation/contracts";
 import {
@@ -129,6 +130,7 @@ export async function GET(request: Request) {
     const matter = await resolveMatter(clientFolder, matterFolder);
     return NextResponse.json(await readCanonicalMatterState(matter));
   } catch (error) {
+    if (error instanceof AlphaReviewError) return NextResponse.json({ code: error.code, error: error.message }, { status: 409 });
     if (error instanceof MatterResolutionError) return resolutionFailure(error);
     return NextResponse.json(
       { code: "IO_FAILED", error: "Canonical podatke trenutno nije moguće pročitati." },
@@ -143,7 +145,7 @@ export async function POST(request: Request) {
 
   try {
     const matter = await resolveMatter(input.clientFolder, input.matterFolder);
-    const result = await acceptCanonicalMatterBaseline(matter, input.expectedReadToken);
+    const result = await withAlphaMatterGate(matter, () => acceptCanonicalMatterBaseline(matter, input.expectedReadToken));
     if (result.code === "BASELINE_ACCEPTED" || result.code === "BASELINE_ALREADY_ACCEPTED") {
       return NextResponse.json({
         ...result,
@@ -164,6 +166,7 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   } catch (error) {
+    if (error instanceof AlphaReviewError) return NextResponse.json({ code: error.code, error: error.message }, { status: 409 });
     if (error instanceof MatterResolutionError) return resolutionFailure(error);
     return NextResponse.json(
       { code: "IO_FAILED", error: "Baseline trenutno nije moguće prihvatiti." },
@@ -178,10 +181,7 @@ export async function PUT(request: Request) {
 
   try {
     const matter = await resolveMatter(input.clientFolder, input.matterFolder);
-    const result = await acceptExternalCanonicalMatterBaseline(
-      matter,
-      input.expectedReadToken,
-    );
+    const result = await withAlphaMatterGate(matter, () => acceptExternalCanonicalMatterBaseline(matter, input.expectedReadToken));
     if (
       result.code === "EXTERNAL_BASELINE_ACCEPTED" ||
       result.code === "BASELINE_ALREADY_ACCEPTED"
@@ -205,6 +205,7 @@ export async function PUT(request: Request) {
       { status: 409 },
     );
   } catch (error) {
+    if (error instanceof AlphaReviewError) return NextResponse.json({ code: error.code, error: error.message }, { status: 409 });
     if (error instanceof MatterResolutionError) return resolutionFailure(error);
     return NextResponse.json(
       { code: "IO_FAILED", error: "Eksternu baseline reviziju trenutno nije moguće prihvatiti." },
@@ -242,7 +243,7 @@ export async function PATCH(request: Request) {
       input.clientFolder,
       input.matterFolder,
     );
-    const result = await mutateCanonicalMatter(matter, input);
+    const result = await withAlphaMatterGate(matter, () => mutateCanonicalMatter(matter, input));
     if (
       result.code !== "CANONICAL_SUCCESS" &&
       result.code !== "CANONICAL_SUCCESS_DERIVED_REBUILD_REQUIRED"
@@ -259,6 +260,7 @@ export async function PATCH(request: Request) {
       { status: result.code === "CANONICAL_SUCCESS" ? 200 : 202 },
     );
   } catch (error) {
+    if (error instanceof AlphaReviewError) return NextResponse.json({ code: error.code, error: error.message }, { status: 409 });
     if (error instanceof MatterResolutionError) return resolutionFailure(error);
     return NextResponse.json(
       { code: "IO_FAILED", error: "Izmjenu trenutno nije moguće bezbjedno sačuvati." },
